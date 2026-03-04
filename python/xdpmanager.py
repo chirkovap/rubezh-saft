@@ -17,6 +17,7 @@ from pathlib import Path
 from python.event_logger import EventLogger
 from python.packet_logger import PacketLogger
 from python.packet_capture import PacketCapture
+from python.config_sync import ConfigSync
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +31,9 @@ class XDPManager:
         self.xdp_mode = config.get('network.xdp_mode', 'xdpgeneric')
         self.xdp_obj_path = config.get('xdp.object_path', '/usr/lib/xdpguard/xdp_filter.o')
         self.xdp_loaded = False
+        
+        # Initialize config synchronizer
+        self.config_sync = ConfigSync()
         
         # Initialize event logger
         self.event_logger = EventLogger(max_events=1000)
@@ -92,6 +96,19 @@ class XDPManager:
                     details={'interface': self.interface, 'mode': self.xdp_mode}
                 )
                 
+                # CRITICAL: Sync config to XDP immediately after loading
+                logger.info("Синхронизация конфигурации с XDP...")
+                if self.config_sync.sync_config_to_xdp(self.config):
+                    logger.info("✓ Конфигурация применена к XDP")
+                    
+                    # Verify sync
+                    if self.config_sync.verify_sync(self.config):
+                        logger.info("✓ Конфигурация проверена и корректна")
+                    else:
+                        logger.warning("⚠ Конфигурация может быть применена неполностью")
+                else:
+                    logger.warning("⚠ Не удалось синхронизировать конфигурацию с XDP")
+                
                 # Start packet capture if enabled
                 if self.packet_capture:
                     try:
@@ -146,9 +163,29 @@ class XDPManager:
         except:
             return False
 
-    def _verify_xdp_loaded(self):
-        """Verify XDP is attached to interface"""
-        pass
+    def reload_config(self):
+        """Reload configuration and sync to XDP (without recompiling)"""
+        try:
+            logger.info("Перезагрузка конфигурации...")
+            
+            # Reload config from file
+            self.config.reload()
+            
+            # Sync to XDP
+            if self.config_sync.sync_config_to_xdp(self.config):
+                self.event_logger.log_event(
+                    event_type='SYSTEM',
+                    severity='INFO',
+                    ip_address='N/A',
+                    message='Конфигурация перезагружена и применена',
+                    details={}
+                )
+                return True
+            return False
+            
+        except Exception as e:
+            logger.error(f"Failed to reload config: {e}")
+            return False
 
     def unload_program(self):
         """Unload XDP program from interface"""
