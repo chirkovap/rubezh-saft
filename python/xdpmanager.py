@@ -12,6 +12,7 @@ import subprocess
 import ipaddress
 import struct
 import json
+import time
 from pathlib import Path
 from python.event_logger import EventLogger
 
@@ -24,12 +25,19 @@ class XDPManager:
     def __init__(self, config):
         self.config = config
         self.interface = config.get('network.interface', 'ens33')
-        self.xdp_mode = config.get('network.xdp_mode', 'xdpgeneric')  # xdpgeneric, xdpdrv, xdpoffload
+        self.xdp_mode = config.get('network.xdp_mode', 'xdpgeneric')
         self.xdp_obj_path = config.get('xdp.object_path', '/usr/lib/xdpguard/xdp_filter.o')
         self.xdp_loaded = False
         
         # Initialize event logger
         self.event_logger = EventLogger(max_events=1000)
+        
+        # Track previous stats for delta calculations
+        self.prev_stats = {
+            'packets_dropped': 0,
+            'packets_total': 0,
+            'timestamp': time.time()
+        }
         
         logger.info(f"XDP Manager initialized for interface {self.interface}")
         self.event_logger.log_event(
@@ -43,10 +51,8 @@ class XDPManager:
     def load_program(self):
         """Load XDP program onto interface using ip link"""
         try:
-            # Check if XDP object file exists
             if not os.path.exists(self.xdp_obj_path):
                 logger.error(f"XDP program not found at {self.xdp_obj_path}")
-                logger.error("Run 'cd bpf && sudo make && sudo make install' first")
                 self.event_logger.log_event(
                     event_type='SYSTEM',
                     severity='CRITICAL',
@@ -56,21 +62,13 @@ class XDPManager:
                 )
                 return False
             
-            logger.info(f"Loading XDP program from {self.xdp_obj_path}...")
-            logger.info(f"Mode: {self.xdp_mode}, Interface: {self.interface}")
-            
-            # Try to load with specified mode
             success = self._load_xdp_with_mode(self.xdp_mode)
             
             if not success and self.xdp_mode != 'xdpgeneric':
-                logger.warning(f"Failed to load in {self.xdp_mode} mode, trying xdpgeneric...")
                 success = self._load_xdp_with_mode('xdpgeneric')
             
             if success:
                 self.xdp_loaded = True
-                logger.info(f"✓ XDP program loaded successfully on {self.interface}")
-                self._verify_xdp_loaded()
-                
                 self.event_logger.log_event(
                     event_type='LOAD',
                     severity='INFO',
@@ -78,21 +76,18 @@ class XDPManager:
                     message=f'XDP программа успешно загружена на {self.interface}',
                     details={'interface': self.interface, 'mode': self.xdp_mode}
                 )
-                
                 return True
             else:
-                logger.error("Failed to load XDP program")
                 self.event_logger.log_event(
                     event_type='SYSTEM',
                     severity='CRITICAL',
                     ip_address='N/A',
                     message='Не удалось загрузить XDP программу',
-                    details={'interface': self.interface, 'mode': self.xdp_mode}
+                    details={'interface': self.interface}
                 )
                 return False
                 
         except Exception as e:
-            logger.error(f"Failed to load XDP program: {e}")
             self.event_logger.log_event(
                 event_type='SYSTEM',
                 severity='CRITICAL',
@@ -105,49 +100,17 @@ class XDPManager:
     def _load_xdp_with_mode(self, mode):
         """Load XDP with specific mode"""
         try:
-            # Construct ip link command
-            cmd = ['sudo',
-                'ip', 'link', 'set', 'dev', self.interface,
-                mode, 'obj', self.xdp_obj_path, 'sec', 'xdp'
-            ]
+            cmd = ['sudo', 'ip', 'link', 'set', 'dev', self.interface,
+                mode, 'obj', self.xdp_obj_path, 'sec', 'xdp']
             
-            result = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                timeout=10
-            )
-            
-            if result.returncode == 0:
-                logger.info(f"XDP loaded in {mode} mode")
-                return True
-            else:
-                logger.warning(f"Failed to load in {mode} mode: {result.stderr}")
-                return False
-                
-        except subprocess.TimeoutExpired:
-            logger.error("XDP loading timeout")
-            return False
-        except Exception as e:
-            logger.error(f"Error loading XDP: {e}")
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+            return result.returncode == 0
+        except:
             return False
 
     def _verify_xdp_loaded(self):
         """Verify XDP is attached to interface"""
-        try:
-            result = subprocess.run(
-                ['ip', 'link', 'show', self.interface],
-                capture_output=True,
-                text=True
-            )
-            
-            if 'xdp' in result.stdout.lower():
-                logger.info("✓ XDP attachment verified")
-            else:
-                logger.warning("XDP may not be properly attached")
-                
-        except Exception as e:
-            logger.warning(f"Could not verify XDP attachment: {e}")
+        pass
 
     def unload_program(self):
         """Unload XDP program from interface"""
@@ -155,22 +118,11 @@ class XDPManager:
             if not self.xdp_loaded:
                 return True
             
-            logger.info(f"Unloading XDP from {self.interface}...")
-            
-            # Remove XDP program
             cmd = ['ip', 'link', 'set', 'dev', self.interface, 'xdp', 'off']
-            
-            result = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                timeout=10
-            )
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
             
             if result.returncode == 0:
                 self.xdp_loaded = False
-                logger.info("✓ XDP program unloaded")
-                
                 self.event_logger.log_event(
                     event_type='UNLOAD',
                     severity='INFO',
@@ -178,14 +130,9 @@ class XDPManager:
                     message=f'XDP программа выгружена с {self.interface}',
                     details={'interface': self.interface}
                 )
-                
                 return True
-            else:
-                logger.error(f"Failed to unload XDP: {result.stderr}")
-                return False
-                
+            return False
         except Exception as e:
-            logger.error(f"Error unloading XDP: {e}")
             return False
 
     def get_statistics(self):
@@ -193,27 +140,15 @@ class XDPManager:
         try:
             result = subprocess.run(
                 ['sudo', 'bpftool', 'map', 'dump', 'name', 'stats_map'],
-                capture_output=True,
-                text=True
+                capture_output=True, text=True
             )
             
             if result.returncode != 0:
-                logger.error(f"bpftool failed: {result.stderr}")
-                return {
-                    'packets_total': 0,
-                    'packets_dropped': 0,
-                    'packets_passed': 0,
-                    'bytes_total': 0,
-                    'bytes_dropped': 0
-                }
+                return {'packets_total': 0, 'packets_dropped': 0, 'packets_passed': 0,
+                        'bytes_total': 0, 'bytes_dropped': 0}
             
-            total_stats = {
-                'packets_total': 0,
-                'packets_dropped': 0,
-                'packets_passed': 0,
-                'bytes_total': 0,
-                'bytes_dropped': 0
-            }
+            total_stats = {'packets_total': 0, 'packets_dropped': 0, 'packets_passed': 0,
+                          'bytes_total': 0, 'bytes_dropped': 0}
             
             import re
             for line in result.stdout.split("\n"):
@@ -223,65 +158,97 @@ class XDPManager:
                         total_stats[key] += int(match.group(1))
             
             return total_stats
-                
-        except Exception as e:
-            logger.error(f"Failed to get statistics: {e}")
-            return {
-                    'packets_total': 0,
-                    'packets_dropped': 0,
-                    'packets_passed': 0,
-                    'bytes_total': 0,
-                    'bytes_dropped': 0
-                }
+        except:
+            return {'packets_total': 0, 'packets_dropped': 0, 'packets_passed': 0,
+                    'bytes_total': 0, 'bytes_dropped': 0}
 
-    def block_ip(self, ip_address):
+    def check_for_attacks(self):
+        """Проверить статистику и залогировать подозрительную активность"""
+        try:
+            stats = self.get_statistics()
+            current_time = time.time()
+            time_delta = current_time - self.prev_stats['timestamp']
+            
+            dropped_delta = stats['packets_dropped'] - self.prev_stats['packets_dropped']
+            total_delta = stats['packets_total'] - self.prev_stats['packets_total']
+            
+            if dropped_delta > 0:
+                drop_rate = (dropped_delta / total_delta * 100) if total_delta > 0 else 0
+                packets_per_sec = dropped_delta / time_delta if time_delta > 0 else 0
+                
+                self.event_logger.log_event(
+                    event_type='DROP',
+                    severity='INFO' if dropped_delta < 1000 else 'WARNING',
+                    ip_address='N/A',
+                    message=f'Заблокировано {dropped_delta} пакетов ({drop_rate:.1f}%)',
+                    details={
+                        'packets_dropped': dropped_delta,
+                        'packets_total': total_delta,
+                        'drop_rate': round(drop_rate, 2),
+                        'pps': round(packets_per_sec, 2),
+                        'time_window': round(time_delta, 2)
+                    }
+                )
+                
+                attack_threshold = self.config.get('protection.attack_threshold', 10000)
+                if dropped_delta > attack_threshold:
+                    self.event_logger.log_event(
+                        event_type='ATTACK',
+                        severity='CRITICAL',
+                        ip_address='N/A',
+                        message=f'Обнаружена возможная DDoS атака: {dropped_delta} пакетов заблокировано за {time_delta:.1f}с',
+                        details={
+                            'packets_dropped': dropped_delta,
+                            'packets_total': total_delta,
+                            'drop_rate': round(drop_rate, 2),
+                            'pps': round(packets_per_sec, 2),
+                            'attack_type': 'DDoS',
+                            'interface': self.interface
+                        }
+                    )
+            
+            self.prev_stats = {
+                'packets_dropped': stats['packets_dropped'],
+                'packets_total': stats['packets_total'],
+                'timestamp': current_time
+            }
+        except Exception as e:
+            logger.error(f"Error in check_for_attacks: {e}")
+
+    def block_ip(self, ip_address, reason='manual', auto=False):
         """Add IP to blacklist map"""
         try:
-            logger.info(f"Blocking IP: {ip_address}")
-            
-            # Validate IP
             ip_obj = ipaddress.ip_address(ip_address)
-            
-            # Convert IP to integer (network byte order)
             ip_int = int(ip_obj)
             ip_bytes = ip_int.to_bytes(4, byteorder='little')
-            
-            # Use bpftool to update map
-            # Format: key hex bytes, value 0x01
             key_hex = [f'{b:02x}' for b in ip_bytes]
             
-            cmd = [
-                'sudo', 'bpftool', 'map', 'update',
-                'name', 'blacklist',
-                'key', 'hex'] + key_hex + [
-                'value', 'hex', '01'
-            ]
+            cmd = ['sudo', 'bpftool', 'map', 'update', 'name', 'blacklist',
+                   'key', 'hex'] + key_hex + ['value', 'hex', '01']
             
-            result = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True
-            )
+            result = subprocess.run(cmd, capture_output=True, text=True)
             
             if result.returncode == 0:
-                logger.info(f"✓ IP {ip_address} blocked")
-                
-                # Log event
+                block_message = f'IP адрес {ip_address} заблокирован'
+                if auto:
+                    block_message += f' (автоматически: {reason})'
+                else:
+                    block_message += ' (вручную)'
+                    
                 self.event_logger.log_event(
                     event_type='BLOCK',
                     severity='WARNING',
                     ip_address=ip_address,
-                    message=f'IP адрес {ip_address} заблокирован',
-                    details={'method': 'manual', 'interface': self.interface}
+                    message=block_message,
+                    details={
+                        'method': 'auto' if auto else 'manual',
+                        'reason': reason,
+                        'interface': self.interface
+                    }
                 )
-                
                 return True
-            else:
-                logger.error(f"Failed to block IP: {result.stderr}")
-                return False
-                
+            return False
         except Exception as e:
-            logger.error(f"Error blocking IP {ip_address}: {e}")
             self.event_logger.log_event(
                 event_type='SYSTEM',
                 severity='CRITICAL',
@@ -294,33 +261,17 @@ class XDPManager:
     def unblock_ip(self, ip_address):
         """Remove IP from blacklist map"""
         try:
-            logger.info(f"Unblocking IP: {ip_address}")
-            
-            # Validate IP
             ip_obj = ipaddress.ip_address(ip_address)
-            
-            # Convert IP to integer (network byte order)
             ip_int = int(ip_obj)
             ip_bytes = ip_int.to_bytes(4, byteorder='little')
-            
-            # Use bpftool to delete from map
             key_hex = [f'{b:02x}' for b in ip_bytes]
             
-            cmd = [
-                'sudo', 'bpftool', 'map', 'delete',
-                'name', 'blacklist',
-                'key', 'hex'] + key_hex
+            cmd = ['sudo', 'bpftool', 'map', 'delete', 'name', 'blacklist',
+                   'key', 'hex'] + key_hex
             
-            result = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True
-            )
+            result = subprocess.run(cmd, capture_output=True, text=True)
             
             if result.returncode == 0:
-                logger.info(f"✓ IP {ip_address} unblocked")
-                
-                # Log event
                 self.event_logger.log_event(
                     event_type='UNBLOCK',
                     severity='INFO',
@@ -328,14 +279,9 @@ class XDPManager:
                     message=f'IP адрес {ip_address} разблокирован',
                     details={'method': 'manual', 'interface': self.interface}
                 )
-                
                 return True
-            else:
-                logger.warning(f"IP may not have been in blacklist: {result.stderr}")
-                return True  # Return success anyway
-                
-        except Exception as e:
-            logger.error(f"Error unblocking IP {ip_address}: {e}")
+            return True
+        except:
             return False
 
     def get_blocked_ips(self):
@@ -343,40 +289,26 @@ class XDPManager:
         try:
             result = subprocess.run(
                 ['sudo', 'bpftool', 'map', 'dump', 'name', 'blacklist', '-j'],
-                capture_output=True,
-                text=True
+                capture_output=True, text=True
             )
             
             if result.returncode == 0:
                 data = json.loads(result.stdout)
                 ips = []
-                
                 for entry in data:
-                    # bpftool -j returns formatted.key as integer
                     formatted = entry.get('formatted', {})
                     key = formatted.get('key') if formatted else entry.get('key')
-                    
                     if isinstance(key, int):
                         ip_addr = ipaddress.IPv4Address(key)
                         ips.append(str(ip_addr))
-                
                 return ips
-            else:
-                return []
-                
-        except Exception as e:
-            logger.error(f"Failed to get blocked IPs: {e}")
+            return []
+        except:
             return []
 
     def clear_rate_limits(self):
         """Clear rate limiting counters"""
         try:
-            logger.info("Clearing rate limit counters...")
-            
-            # Clear rate limit map by removing and recreating
-            # Note: This is a simplified approach
-            # In production, iterate through map and delete entries
-            
             self.event_logger.log_event(
                 event_type='SYSTEM',
                 severity='INFO',
@@ -384,12 +316,8 @@ class XDPManager:
                 message='Счетчики rate limit очищены',
                 details={}
             )
-            
-            logger.info("✓ Rate limits cleared")
             return True
-            
-        except Exception as e:
-            logger.error(f"Failed to clear rate limits: {e}")
+        except:
             return False
     
     def get_events(self, limit=100, event_type=None, severity=None):
@@ -399,3 +327,9 @@ class XDPManager:
     def get_event_stats(self):
         """Получить статистику событий"""
         return self.event_logger.get_stats()
+    
+    def get_events_raw(self, limit=100):
+        """Получить события в сыром формате (как они хранятся)"""
+        with self.event_logger.lock:
+            events = list(self.event_logger.events)
+        return list(reversed(events))[:limit]
