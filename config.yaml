@@ -65,6 +65,16 @@ protection:
   # Limits ICMP packets per second per IP
   icmp_rate: 10       # ICMP packets per second per IP
   icmp_burst: 20      # Burst size for ICMP packets
+  
+  # ===== Attack Detection Settings =====
+  # Threshold for detecting DDoS attacks based on drop rate
+  drop_rate_threshold: 50   # Percent (если >50% пакетов дропается)
+  
+  # Threshold for detecting flood attacks based on packets per second
+  pps_threshold: 100000     # packets/sec (100k пакетов в секунду)
+  
+  # How often to check for attacks (seconds)
+  check_interval: 5         # Проверять каждые 5 секунд
 
 # ===== IP Blacklist Settings =====
 blacklist:
