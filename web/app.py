@@ -183,6 +183,51 @@ def create_app(config, xdp_manager):
     
     # ========== END EVENT ENDPOINTS ==========
 
+    # ========== PACKET LOGGING ENDPOINTS ==========
+    
+    @app.route('/api/packets')
+    def api_packets():
+        """Получить логи пакетов"""
+        try:
+            limit = int(request.args.get('limit', 100))
+            action = request.args.get('action', None)  # PASS or DROP
+            protocol = request.args.get('protocol', None)  # TCP, UDP, ICMP
+            
+            packets = xdp_manager.get_packet_logs(limit, action, protocol)
+            
+            return jsonify({
+                'packets': packets,
+                'count': len(packets)
+            })
+        except Exception as e:
+            logger.error(f"Failed to get packet logs: {e}")
+            return jsonify({'error': str(e)}), 500
+
+    @app.route('/api/packets/stats')
+    def api_packet_stats():
+        """Статистика логов пакетов"""
+        try:
+            stats = xdp_manager.get_packet_stats()
+            return jsonify(stats)
+        except Exception as e:
+            logger.error(f"Failed to get packet stats: {e}")
+            return jsonify({'error': str(e)}), 500
+
+    @app.route('/api/packets/clear', methods=['POST'])
+    def api_clear_packets():
+        """Очистить логи пакетов"""
+        try:
+            count = xdp_manager.packet_logger.clear()
+            return jsonify({
+                'success': True,
+                'message': f'Логи пакетов очищены ({count} записей удалено)'
+            })
+        except Exception as e:
+            logger.error(f"Failed to clear packet logs: {e}")
+            return jsonify({'success': False, 'error': str(e)}), 500
+
+    # ========== END PACKET ENDPOINTS ==========
+
     @app.route('/api/config', methods=['GET', 'POST'])
     def api_config():
         """Get or update configuration"""
