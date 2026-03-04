@@ -16,6 +16,7 @@ import time
 from pathlib import Path
 from python.event_logger import EventLogger
 from python.packet_logger import PacketLogger
+from python.packet_capture import PacketCapture
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +37,15 @@ class XDPManager:
         # Initialize packet logger
         max_packets = config.get('logging.max_packets', 10000)
         self.packet_logger = PacketLogger(max_packets=max_packets)
+        
+        # Initialize packet capture
+        self.packet_capture = None
+        if config.get('logging.enable_packet_logging', False):
+            self.packet_capture = PacketCapture(
+                packet_logger=self.packet_logger,
+                interface=self.interface
+            )
+            logger.info("PacketCapture будет запущен после загрузки XDP программы")
         
         # Track previous stats for delta calculations
         self.prev_stats = {
@@ -81,6 +91,22 @@ class XDPManager:
                     message=f'XDP программа успешно загружена на {self.interface}',
                     details={'interface': self.interface, 'mode': self.xdp_mode}
                 )
+                
+                # Start packet capture if enabled
+                if self.packet_capture:
+                    try:
+                        self.packet_capture.start()
+                        logger.info("✓ Захват пакетов запущен")
+                        self.event_logger.log_event(
+                            event_type='SYSTEM',
+                            severity='INFO',
+                            ip_address='N/A',
+                            message='Захват пакетов запущен',
+                            details={'interface': self.interface}
+                        )
+                    except Exception as e:
+                        logger.warning(f"Failed to start packet capture: {e}")
+                
                 return True
             else:
                 self.event_logger.log_event(
@@ -120,6 +146,14 @@ class XDPManager:
     def unload_program(self):
         """Unload XDP program from interface"""
         try:
+            # Stop packet capture first
+            if self.packet_capture:
+                try:
+                    self.packet_capture.stop()
+                    logger.info("Packet capture stopped")
+                except:
+                    pass
+            
             if not self.xdp_loaded:
                 return True
             
@@ -158,7 +192,7 @@ class XDPManager:
             import re
             for line in result.stdout.split("\n"):
                 for key in total_stats.keys():
-                    match = re.search(f'"{key}":\s*(\d+)', line)
+                    match = re.search(rf'"{key}":\s*(\d+)', line)
                     if match:
                         total_stats[key] += int(match.group(1))
             
@@ -350,33 +384,3 @@ class XDPManager:
     def get_packet_stats(self):
         """Получить статистику логов пакетов"""
         return self.packet_logger.get_stats()
-    
-    def simulate_packet_logs(self):
-        """
-        Симуляция логов пакетов для тестирования.
-        Удалить после интеграции с реальным eBPF.
-        """
-        import random
-        
-        protocols = ['TCP', 'UDP', 'ICMP']
-        actions = ['PASS', 'DROP']
-        
-        # Генерируем 10 случайных пакетов
-        for _ in range(10):
-            src_ip = f"{random.randint(1,223)}.{random.randint(0,255)}.{random.randint(0,255)}.{random.randint(1,254)}"
-            dst_ip = f"{random.randint(1,223)}.{random.randint(0,255)}.{random.randint(0,255)}.{random.randint(1,254)}"
-            protocol = random.choice(protocols)
-            action = random.choice(actions)
-            
-            self.packet_logger.log_packet(
-                src_ip=src_ip,
-                dst_ip=dst_ip,
-                protocol=protocol,
-                src_port=random.randint(1024, 65535) if protocol != 'ICMP' else None,
-                dst_port=random.randint(1, 1024) if protocol != 'ICMP' else None,
-                size=random.randint(64, 1500),
-                action=action,
-                reason='rate_limit' if action == 'DROP' else None
-            )
-            
-            time.sleep(0.1)
