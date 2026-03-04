@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ru">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -33,8 +33,8 @@
         .stat-card.warning {
             border-left-color: #ffc107;
         }
-        .blocked-ips-table {
-            max-height: 400px;
+        .blocked-ips-table, .events-table {
+            max-height: 500px;
             overflow-y: auto;
         }
         .navbar-brand {
@@ -47,6 +47,29 @@
         @keyframes pulse {
             0%, 100% { opacity: 1; }
             50% { opacity: 0.7; }
+        }
+        .event-row {
+            font-size: 0.9rem;
+        }
+        .event-row.severity-CRITICAL {
+            background-color: #f8d7da;
+        }
+        .event-row.severity-WARNING {
+            background-color: #fff3cd;
+        }
+        .event-row.severity-INFO {
+            background-color: #d1ecf1;
+        }
+        .event-timestamp {
+            font-family: monospace;
+            font-size: 0.85rem;
+        }
+        .event-badge {
+            font-size: 0.75rem;
+            padding: 0.25rem 0.5rem;
+        }
+        .tab-content {
+            padding-top: 20px;
         }
     </style>
 </head>
@@ -64,138 +87,260 @@
     </nav>
 
     <div class="container mt-4">
-        <!-- Statistics Cards -->
-        <div class="row mb-4">
-            <div class="col-md-3">
-                <div class="card stat-card">
-                    <div class="card-body">
-                        <h6 class="card-subtitle mb-2 text-muted">
-                            <i class="fas fa-network-wired"></i> Total Packets
-                        </h6>
-                        <h3 class="card-title" id="packets-total">0</h3>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-3">
-                <div class="card stat-card danger">
-                    <div class="card-body">
-                        <h6 class="card-subtitle mb-2 text-muted">
-                            <i class="fas fa-times-circle"></i> Dropped
-                        </h6>
-                        <h3 class="card-title text-danger" id="packets-dropped">0</h3>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-3">
-                <div class="card stat-card success">
-                    <div class="card-body">
-                        <h6 class="card-subtitle mb-2 text-muted">
-                            <i class="fas fa-check-circle"></i> Passed
-                        </h6>
-                        <h3 class="card-title text-success" id="packets-passed">0</h3>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-3">
-                <div class="card stat-card warning">
-                    <div class="card-body">
-                        <h6 class="card-subtitle mb-2 text-muted">
-                            <i class="fas fa-ban"></i> Blocked IPs
-                        </h6>
-                        <h3 class="card-title text-warning" id="blocked-count">0</h3>
-                    </div>
-                </div>
-            </div>
-        </div>
+        <!-- Tabs Navigation -->
+        <ul class="nav nav-tabs" id="mainTabs" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="dashboard-tab" data-bs-toggle="tab" 
+                        data-bs-target="#dashboard" type="button" role="tab">
+                    <i class="fas fa-tachometer-alt"></i> Дашборд
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="logs-tab" data-bs-toggle="tab" 
+                        data-bs-target="#logs" type="button" role="tab">
+                    <i class="fas fa-list-alt"></i> Логи событий
+                    <span class="badge bg-danger ms-2" id="event-count-badge">0</span>
+                </button>
+            </li>
+        </ul>
 
-        <!-- Throughput Stats -->
-        <div class="row mb-4">
-            <div class="col-md-6">
-                <div class="card">
-                    <div class="card-body">
-                        <h6 class="card-subtitle mb-2 text-muted">
-                            <i class="fas fa-tachometer-alt"></i> Throughput
-                        </h6>
-                        <h4 id="throughput">0 Mbps</h4>
+        <!-- Tab Content -->
+        <div class="tab-content" id="mainTabContent">
+            <!-- Dashboard Tab -->
+            <div class="tab-pane fade show active" id="dashboard" role="tabpanel">
+                <!-- Statistics Cards -->
+                <div class="row mb-4">
+                    <div class="col-md-3">
+                        <div class="card stat-card">
+                            <div class="card-body">
+                                <h6 class="card-subtitle mb-2 text-muted">
+                                    <i class="fas fa-network-wired"></i> Total Packets
+                                </h6>
+                                <h3 class="card-title" id="packets-total">0</h3>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card stat-card danger">
+                            <div class="card-body">
+                                <h6 class="card-subtitle mb-2 text-muted">
+                                    <i class="fas fa-times-circle"></i> Dropped
+                                </h6>
+                                <h3 class="card-title text-danger" id="packets-dropped">0</h3>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card stat-card success">
+                            <div class="card-body">
+                                <h6 class="card-subtitle mb-2 text-muted">
+                                    <i class="fas fa-check-circle"></i> Passed
+                                </h6>
+                                <h3 class="card-title text-success" id="packets-passed">0</h3>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card stat-card warning">
+                            <div class="card-body">
+                                <h6 class="card-subtitle mb-2 text-muted">
+                                    <i class="fas fa-ban"></i> Blocked IPs
+                                </h6>
+                                <h3 class="card-title text-warning" id="blocked-count">0</h3>
+                            </div>
+                        </div>
                     </div>
                 </div>
-            </div>
-            <div class="col-md-6">
-                <div class="card">
-                    <div class="card-body">
-                        <h6 class="card-subtitle mb-2 text-muted">
-                            <i class="fas fa-chart-line"></i> Drop Rate
-                        </h6>
-                        <h4 id="drop-rate">0%</h4>
-                    </div>
-                </div>
-            </div>
-        </div>
 
-        <!-- IP Management and Actions -->
-        <div class="row mb-4">
-            <div class="col-md-6">
-                <div class="card">
-                    <div class="card-header">
-                        <h5><i class="fas fa-ban"></i> Block IP Address</h5>
+                <!-- Throughput Stats -->
+                <div class="row mb-4">
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-body">
+                                <h6 class="card-subtitle mb-2 text-muted">
+                                    <i class="fas fa-tachometer-alt"></i> Throughput
+                                </h6>
+                                <h4 id="throughput">0 Mbps</h4>
+                            </div>
+                        </div>
                     </div>
-                    <div class="card-body">
-                        <div class="input-group mb-3">
-                            <input type="text" class="form-control" id="ip-input" 
-                                   placeholder="192.168.1.100" 
-                                   pattern="\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}">
-                            <button class="btn btn-danger" onclick="blockIP()">
-                                <i class="fas fa-ban"></i> Block
-                            </button>
-                            <button class="btn btn-success" onclick="unblockIP()">
-                                <i class="fas fa-check"></i> Unblock
-                            </button>
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-body">
+                                <h6 class="card-subtitle mb-2 text-muted">
+                                    <i class="fas fa-chart-line"></i> Drop Rate
+                                </h6>
+                                <h4 id="drop-rate">0%</h4>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- IP Management and Actions -->
+                <div class="row mb-4">
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5><i class="fas fa-ban"></i> Block IP Address</h5>
+                            </div>
+                            <div class="card-body">
+                                <div class="input-group mb-3">
+                                    <input type="text" class="form-control" id="ip-input" 
+                                           placeholder="192.168.1.100" 
+                                           pattern="\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}">
+                                    <button class="btn btn-danger" onclick="blockIP()">
+                                        <i class="fas fa-ban"></i> Block
+                                    </button>
+                                    <button class="btn btn-success" onclick="unblockIP()">
+                                        <i class="fas fa-check"></i> Unblock
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5><i class="fas fa-tools"></i> Quick Actions</h5>
+                            </div>
+                            <div class="card-body">
+                                <button class="btn btn-primary me-2" onclick="refreshStats()">
+                                    <i class="fas fa-sync"></i> Refresh Stats
+                                </button>
+                                <button class="btn btn-warning me-2" onclick="clearRateLimits()">
+                                    <i class="fas fa-eraser"></i> Clear Rate Limits
+                                </button>
+                                <button class="btn btn-info" onclick="exportData()">
+                                    <i class="fas fa-download"></i> Export Data
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Blocked IPs Table -->
+                <div class="row">
+                    <div class="col-12">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5><i class="fas fa-list"></i> Blocked IP Addresses</h5>
+                            </div>
+                            <div class="card-body blocked-ips-table">
+                                <table class="table table-striped table-hover">
+                                    <thead class="table-dark">
+                                        <tr>
+                                            <th><i class="fas fa-hashtag"></i> #</th>
+                                            <th><i class="fas fa-network-wired"></i> IP Address</th>
+                                            <th><i class="fas fa-cog"></i> Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="blocked-table-body">
+                                        <tr>
+                                            <td colspan="3" class="text-center">Loading...</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
-            <div class="col-md-6">
-                <div class="card">
-                    <div class="card-header">
-                        <h5><i class="fas fa-tools"></i> Quick Actions</h5>
+
+            <!-- Logs Tab -->
+            <div class="tab-pane fade" id="logs" role="tabpanel">
+                <!-- Event Filters -->
+                <div class="row mb-3">
+                    <div class="col-md-8">
+                        <div class="btn-group" role="group">
+                            <button type="button" class="btn btn-outline-primary" onclick="filterEvents('all')">
+                                <i class="fas fa-list"></i> Все
+                            </button>
+                            <button type="button" class="btn btn-outline-danger" onclick="filterEvents('BLOCK')">
+                                <i class="fas fa-ban"></i> BLOCK
+                            </button>
+                            <button type="button" class="btn btn-outline-success" onclick="filterEvents('UNBLOCK')">
+                                <i class="fas fa-check"></i> UNBLOCK
+                            </button>
+                            <button type="button" class="btn btn-outline-info" onclick="filterEvents('SYSTEM')">
+                                <i class="fas fa-cog"></i> SYSTEM
+                            </button>
+                        </div>
+                        
+                        <div class="btn-group ms-2" role="group">
+                            <button type="button" class="btn btn-outline-secondary" onclick="filterSeverity('all')">
+                                Все
+                            </button>
+                            <button type="button" class="btn btn-outline-danger" onclick="filterSeverity('CRITICAL')">
+                                CRITICAL
+                            </button>
+                            <button type="button" class="btn btn-outline-warning" onclick="filterSeverity('WARNING')">
+                                WARNING
+                            </button>
+                            <button type="button" class="btn btn-outline-info" onclick="filterSeverity('INFO')">
+                                INFO
+                            </button>
+                        </div>
                     </div>
-                    <div class="card-body">
-                        <button class="btn btn-primary me-2" onclick="refreshStats()">
-                            <i class="fas fa-sync"></i> Refresh Stats
+                    <div class="col-md-4 text-end">
+                        <button class="btn btn-warning" onclick="clearEvents()">
+                            <i class="fas fa-trash"></i> Очистить логи
                         </button>
-                        <button class="btn btn-warning me-2" onclick="clearRateLimits()">
-                            <i class="fas fa-eraser"></i> Clear Rate Limits
-                        </button>
-                        <button class="btn btn-info" onclick="exportData()">
-                            <i class="fas fa-download"></i> Export Data
+                        <button class="btn btn-primary" onclick="refreshEvents()">
+                            <i class="fas fa-sync"></i> Обновить
                         </button>
                     </div>
                 </div>
-            </div>
-        </div>
 
-        <!-- Blocked IPs Table -->
-        <div class="row">
-            <div class="col-12">
-                <div class="card">
-                    <div class="card-header">
-                        <h5><i class="fas fa-list"></i> Blocked IP Addresses</h5>
+                <!-- Event Statistics -->
+                <div class="row mb-3">
+                    <div class="col-md-12">
+                        <div class="card">
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-md-3">
+                                        <strong>Всего событий:</strong> <span id="total-events">0</span>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <strong>За последний час:</strong> <span id="events-last-hour">0</span>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <strong>CRITICAL:</strong> <span class="text-danger" id="critical-count">0</span>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <strong>WARNING:</strong> <span class="text-warning" id="warning-count">0</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
-                    <div class="card-body blocked-ips-table">
-                        <table class="table table-striped table-hover">
-                            <thead class="table-dark">
-                                <tr>
-                                    <th><i class="fas fa-hashtag"></i> #</th>
-                                    <th><i class="fas fa-network-wired"></i> IP Address</th>
-                                    <th><i class="fas fa-cog"></i> Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody id="blocked-table-body">
-                                <tr>
-                                    <td colspan="3" class="text-center">Loading...</td>
-                                </tr>
-                            </tbody>
-                        </table>
+                </div>
+
+                <!-- Events Table -->
+                <div class="row">
+                    <div class="col-12">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5><i class="fas fa-stream"></i> События безопасности (SIEM)</h5>
+                            </div>
+                            <div class="card-body events-table">
+                                <table class="table table-sm table-hover">
+                                    <thead class="table-dark">
+                                        <tr>
+                                            <th style="width: 160px">Время</th>
+                                            <th style="width: 100px">Тип</th>
+                                            <th style="width: 100px">Уровень</th>
+                                            <th style="width: 130px">IP</th>
+                                            <th>Сообщение</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="events-table-body">
+                                        <tr>
+                                            <td colspan="5" class="text-center">Загрузка...</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -207,12 +352,18 @@
     
     <!-- Custom JavaScript -->
     <script>
+        // Global filters
+        let currentEventTypeFilter = null;
+        let currentSeverityFilter = null;
+        
         // Auto-refresh every 2 seconds
         setInterval(refreshStats, 2000);
+        setInterval(refreshEvents, 3000);
         
         // Initial load
         refreshStats();
         loadBlockedIPs();
+        refreshEvents();
 
         function refreshStats() {
             fetch('/api/status')
@@ -271,6 +422,117 @@
                 .catch(err => console.error('Failed to load blocked IPs:', err));
         }
 
+        function refreshEvents() {
+            let url = '/api/events?limit=100';
+            if (currentEventTypeFilter) {
+                url += `&type=${currentEventTypeFilter}`;
+            }
+            if (currentSeverityFilter) {
+                url += `&severity=${currentSeverityFilter}`;
+            }
+            
+            fetch(url)
+                .then(res => res.json())
+                .then(data => {
+                    const tbody = document.getElementById('events-table-body');
+                    tbody.innerHTML = '';
+                    
+                    // Update event count badge
+                    document.getElementById('event-count-badge').textContent = data.count || 0;
+                    
+                    if (!data.events || data.events.length === 0) {
+                        tbody.innerHTML = '<tr><td colspan="5" class="text-center">Событий нет</td></tr>';
+                        return;
+                    }
+                    
+                    data.events.forEach(event => {
+                        const timestamp = new Date(event.timestamp).toLocaleString('ru-RU');
+                        const severityClass = `severity-${event.severity}`;
+                        const severityBadge = getSeverityBadge(event.severity);
+                        const typeBadge = getTypeBadge(event.type);
+                        
+                        const row = `
+                            <tr class="event-row ${severityClass}">
+                                <td class="event-timestamp">${timestamp}</td>
+                                <td>${typeBadge}</td>
+                                <td>${severityBadge}</td>
+                                <td><code>${event.ip}</code></td>
+                                <td>${event.message}</td>
+                            </tr>
+                        `;
+                        tbody.innerHTML += row;
+                    });
+                })
+                .catch(err => console.error('Failed to load events:', err));
+            
+            // Update event statistics
+            fetch('/api/events/stats')
+                .then(res => res.json())
+                .then(stats => {
+                    document.getElementById('total-events').textContent = stats.total || 0;
+                    document.getElementById('events-last-hour').textContent = stats.recent_count?.last_hour || 0;
+                    document.getElementById('critical-count').textContent = stats.by_severity?.CRITICAL || 0;
+                    document.getElementById('warning-count').textContent = stats.by_severity?.WARNING || 0;
+                })
+                .catch(err => console.error('Failed to load event stats:', err));
+        }
+
+        function getSeverityBadge(severity) {
+            const colors = {
+                'CRITICAL': 'danger',
+                'WARNING': 'warning',
+                'INFO': 'info'
+            };
+            return `<span class="badge bg-${colors[severity] || 'secondary'} event-badge">${severity}</span>`;
+        }
+
+        function getTypeBadge(type) {
+            const icons = {
+                'BLOCK': '<i class="fas fa-ban text-danger"></i>',
+                'UNBLOCK': '<i class="fas fa-check text-success"></i>',
+                'SYSTEM': '<i class="fas fa-cog text-info"></i>',
+                'LOAD': '<i class="fas fa-upload text-success"></i>',
+                'UNLOAD': '<i class="fas fa-download text-warning"></i>',
+                'DROP': '<i class="fas fa-times text-danger"></i>',
+                'ATTACK': '<i class="fas fa-exclamation-triangle text-danger"></i>'
+            };
+            return `${icons[type] || ''} <span class="event-badge">${type}</span>`;
+        }
+
+        function filterEvents(type) {
+            currentEventTypeFilter = type === 'all' ? null : type;
+            refreshEvents();
+        }
+
+        function filterSeverity(severity) {
+            currentSeverityFilter = severity === 'all' ? null : severity;
+            refreshEvents();
+        }
+
+        function clearEvents() {
+            if (!confirm('Очистить все события?')) {
+                return;
+            }
+            
+            fetch('/api/events/clear', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    alert(data.message);
+                    refreshEvents();
+                } else {
+                    alert('Ошибка: ' + (data.error || 'Unknown error'));
+                }
+            })
+            .catch(err => {
+                console.error('Error:', err);
+                alert('Не удалось очистить логи');
+            });
+        }
+
         function blockIP() {
             const ip = document.getElementById('ip-input').value;
             if (!ip) {
@@ -290,6 +552,7 @@
                     document.getElementById('ip-input').value = '';
                     refreshStats();
                     loadBlockedIPs();
+                    refreshEvents();
                 } else {
                     alert('Failed to block IP: ' + (data.error || 'Unknown error'));
                 }
@@ -323,6 +586,7 @@
                     document.getElementById('ip-input').value = '';
                     refreshStats();
                     loadBlockedIPs();
+                    refreshEvents();
                 } else {
                     alert('Failed to unblock IP: ' + (data.error || 'Unknown error'));
                 }
