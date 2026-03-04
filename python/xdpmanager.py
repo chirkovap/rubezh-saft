@@ -13,6 +13,7 @@ import ipaddress
 import struct
 import json
 from pathlib import Path
+from python.event_logger import EventLogger
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +28,17 @@ class XDPManager:
         self.xdp_obj_path = config.get('xdp.object_path', '/usr/lib/xdpguard/xdp_filter.o')
         self.xdp_loaded = False
         
+        # Initialize event logger
+        self.event_logger = EventLogger(max_events=1000)
+        
         logger.info(f"XDP Manager initialized for interface {self.interface}")
+        self.event_logger.log_event(
+            event_type='SYSTEM',
+            severity='INFO',
+            ip_address='N/A',
+            message=f'XDPGuard инициализирован для интерфейса {self.interface}',
+            details={'interface': self.interface, 'mode': self.xdp_mode}
+        )
 
     def load_program(self):
         """Load XDP program onto interface using ip link"""
@@ -36,6 +47,13 @@ class XDPManager:
             if not os.path.exists(self.xdp_obj_path):
                 logger.error(f"XDP program not found at {self.xdp_obj_path}")
                 logger.error("Run 'cd bpf && sudo make && sudo make install' first")
+                self.event_logger.log_event(
+                    event_type='SYSTEM',
+                    severity='CRITICAL',
+                    ip_address='N/A',
+                    message=f'XDP программа не найдена: {self.xdp_obj_path}',
+                    details={'path': self.xdp_obj_path}
+                )
                 return False
             
             logger.info(f"Loading XDP program from {self.xdp_obj_path}...")
@@ -52,13 +70,36 @@ class XDPManager:
                 self.xdp_loaded = True
                 logger.info(f"✓ XDP program loaded successfully on {self.interface}")
                 self._verify_xdp_loaded()
+                
+                self.event_logger.log_event(
+                    event_type='LOAD',
+                    severity='INFO',
+                    ip_address='N/A',
+                    message=f'XDP программа успешно загружена на {self.interface}',
+                    details={'interface': self.interface, 'mode': self.xdp_mode}
+                )
+                
                 return True
             else:
                 logger.error("Failed to load XDP program")
+                self.event_logger.log_event(
+                    event_type='SYSTEM',
+                    severity='CRITICAL',
+                    ip_address='N/A',
+                    message='Не удалось загрузить XDP программу',
+                    details={'interface': self.interface, 'mode': self.xdp_mode}
+                )
                 return False
                 
         except Exception as e:
             logger.error(f"Failed to load XDP program: {e}")
+            self.event_logger.log_event(
+                event_type='SYSTEM',
+                severity='CRITICAL',
+                ip_address='N/A',
+                message=f'Ошибка при загрузке XDP: {str(e)}',
+                details={'error': str(e)}
+            )
             return False
 
     def _load_xdp_with_mode(self, mode):
@@ -129,6 +170,15 @@ class XDPManager:
             if result.returncode == 0:
                 self.xdp_loaded = False
                 logger.info("✓ XDP program unloaded")
+                
+                self.event_logger.log_event(
+                    event_type='UNLOAD',
+                    severity='INFO',
+                    ip_address='N/A',
+                    message=f'XDP программа выгружена с {self.interface}',
+                    details={'interface': self.interface}
+                )
+                
                 return True
             else:
                 logger.error(f"Failed to unload XDP: {result.stderr}")
@@ -183,16 +233,6 @@ class XDPManager:
                     'bytes_total': 0,
                     'bytes_dropped': 0
                 }
-                
-        except Exception as e:
-            logger.error(f"Failed to get statistics: {e}")
-            return {
-                'packets_total': 0,
-                'packets_dropped': 0,
-                'packets_passed': 0,
-                'bytes_total': 0,
-                'bytes_dropped': 0
-            }
 
     def block_ip(self, ip_address):
         """Add IP to blacklist map"""
@@ -225,6 +265,16 @@ class XDPManager:
             
             if result.returncode == 0:
                 logger.info(f"✓ IP {ip_address} blocked")
+                
+                # Log event
+                self.event_logger.log_event(
+                    event_type='BLOCK',
+                    severity='WARNING',
+                    ip_address=ip_address,
+                    message=f'IP адрес {ip_address} заблокирован',
+                    details={'method': 'manual', 'interface': self.interface}
+                )
+                
                 return True
             else:
                 logger.error(f"Failed to block IP: {result.stderr}")
@@ -232,6 +282,13 @@ class XDPManager:
                 
         except Exception as e:
             logger.error(f"Error blocking IP {ip_address}: {e}")
+            self.event_logger.log_event(
+                event_type='SYSTEM',
+                severity='CRITICAL',
+                ip_address=ip_address,
+                message=f'Ошибка при блокировке IP: {str(e)}',
+                details={'error': str(e)}
+            )
             return False
 
     def unblock_ip(self, ip_address):
@@ -262,6 +319,16 @@ class XDPManager:
             
             if result.returncode == 0:
                 logger.info(f"✓ IP {ip_address} unblocked")
+                
+                # Log event
+                self.event_logger.log_event(
+                    event_type='UNBLOCK',
+                    severity='INFO',
+                    ip_address=ip_address,
+                    message=f'IP адрес {ip_address} разблокирован',
+                    details={'method': 'manual', 'interface': self.interface}
+                )
+                
                 return True
             else:
                 logger.warning(f"IP may not have been in blacklist: {result.stderr}")
@@ -310,9 +377,25 @@ class XDPManager:
             # Note: This is a simplified approach
             # In production, iterate through map and delete entries
             
+            self.event_logger.log_event(
+                event_type='SYSTEM',
+                severity='INFO',
+                ip_address='N/A',
+                message='Счетчики rate limit очищены',
+                details={}
+            )
+            
             logger.info("✓ Rate limits cleared")
             return True
             
         except Exception as e:
             logger.error(f"Failed to clear rate limits: {e}")
             return False
+    
+    def get_events(self, limit=100, event_type=None, severity=None):
+        """Получить события из event logger"""
+        return self.event_logger.get_events(limit, event_type, severity)
+    
+    def get_event_stats(self):
+        """Получить статистику событий"""
+        return self.event_logger.get_stats()
