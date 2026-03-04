@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>XDPGuard Dashboard - DDoS Protection</title>
+    <title>XDPGuard Dashboard - Защита от DDoS</title>
     
     <!-- Bootstrap CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
@@ -13,71 +13,130 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
     <style>
-        body {
-            background-color: #f8f9fa;
+        :root {
+            --bg-color: #f8f9fa;
+            --card-bg: #ffffff;
+            --text-color: #212529;
+            --border-color: #dee2e6;
+            --hover-bg: #f0f0f0;
+            --table-stripe: #f8f9fa;
         }
+        
+        [data-theme="dark"] {
+            --bg-color: #1a1d20;
+            --card-bg: #2d3238;
+            --text-color: #e9ecef;
+            --border-color: #495057;
+            --hover-bg: #3a3f47;
+            --table-stripe: #343a40;
+        }
+        
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            transition: background-color 0.3s, color 0.3s;
+        }
+        
+        .card {
+            background-color: var(--card-bg);
+            border-color: var(--border-color);
+            color: var(--text-color);
+            transition: background-color 0.3s, border-color 0.3s;
+        }
+        
         .stat-card {
             border-left: 4px solid #007bff;
-            transition: transform 0.2s;
+            transition: transform 0.2s, box-shadow 0.3s;
         }
         .stat-card:hover {
             transform: translateY(-5px);
-            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            box-shadow: 0 4px 12px rgba(0,123,255,0.3);
         }
         .stat-card.danger {
             border-left-color: #dc3545;
         }
+        .stat-card.danger:hover {
+            box-shadow: 0 4px 12px rgba(220,53,69,0.3);
+        }
         .stat-card.success {
             border-left-color: #28a745;
+        }
+        .stat-card.success:hover {
+            box-shadow: 0 4px 12px rgba(40,167,69,0.3);
         }
         .stat-card.warning {
             border-left-color: #ffc107;
         }
+        .stat-card.warning:hover {
+            box-shadow: 0 4px 12px rgba(255,193,7,0.3);
+        }
+        
         .blocked-ips-table, .events-table {
             max-height: 500px;
             overflow-y: auto;
         }
+        
         .navbar-brand {
             font-weight: bold;
             font-size: 1.5rem;
         }
+        
         .status-badge {
             animation: pulse 2s infinite;
         }
+        
         @keyframes pulse {
             0%, 100% { opacity: 1; }
             50% { opacity: 0.7; }
         }
+        
         .event-row {
             font-size: 0.9rem;
             cursor: pointer;
+            transition: background-color 0.2s;
         }
+        
         .event-row:hover {
-            background-color: #f0f0f0 !important;
+            background-color: var(--hover-bg) !important;
         }
-        .event-row.severity-CRITICAL {
+        
+        [data-theme="light"] .event-row.severity-CRITICAL {
             background-color: #f8d7da;
         }
-        .event-row.severity-WARNING {
+        [data-theme="light"] .event-row.severity-WARNING {
             background-color: #fff3cd;
         }
-        .event-row.severity-INFO {
+        [data-theme="light"] .event-row.severity-INFO {
             background-color: #d1ecf1;
         }
+        
+        [data-theme="dark"] .event-row.severity-CRITICAL {
+            background-color: #5a2b2e;
+        }
+        [data-theme="dark"] .event-row.severity-WARNING {
+            background-color: #5a4f2b;
+        }
+        [data-theme="dark"] .event-row.severity-INFO {
+            background-color: #2b4f5a;
+        }
+        
         .event-timestamp {
             font-family: monospace;
             font-size: 0.85rem;
         }
+        
         .event-badge {
             font-size: 0.75rem;
             padding: 0.25rem 0.5rem;
         }
+        
         .tab-content {
             padding-top: 20px;
         }
+        
         .json-viewer {
-            background-color: #f5f5f5;
-            border: 1px solid #ddd;
+            background-color: var(--table-stripe);
+            border: 1px solid var(--border-color);
             border-radius: 4px;
             padding: 10px;
             font-family: 'Courier New', monospace;
@@ -87,35 +146,92 @@
             max-height: 400px;
             overflow-y: auto;
         }
+        
         .json-key {
             color: #881391;
             font-weight: bold;
         }
+        
         .json-string {
             color: #1A1AA6;
         }
+        
+        [data-theme="dark"] .json-string {
+            color: #89d0ff;
+        }
+        
         .json-number {
             color: #164;
         }
+        
+        [data-theme="dark"] .json-number {
+            color: #b5cea8;
+        }
+        
         .clickable-icon {
             cursor: pointer;
             color: #007bff;
         }
+        
         .clickable-icon:hover {
             color: #0056b3;
         }
+        
+        .theme-toggle {
+            cursor: pointer;
+            font-size: 1.2rem;
+            transition: transform 0.3s;
+        }
+        
+        .theme-toggle:hover {
+            transform: scale(1.1);
+        }
+        
+        [data-theme="dark"] .table {
+            color: var(--text-color);
+        }
+        
+        [data-theme="dark"] .table-striped > tbody > tr:nth-of-type(odd) > * {
+            background-color: var(--table-stripe);
+        }
+        
+        [data-theme="dark"] .form-control {
+            background-color: var(--card-bg);
+            border-color: var(--border-color);
+            color: var(--text-color);
+        }
+        
+        [data-theme="dark"] .form-control:focus {
+            background-color: var(--card-bg);
+            border-color: #007bff;
+            color: var(--text-color);
+        }
+        
+        [data-theme="dark"] .modal-content {
+            background-color: var(--card-bg);
+            color: var(--text-color);
+        }
+        
+        [data-theme="dark"] .btn-close {
+            filter: invert(1);
+        }
     </style>
 </head>
-<body>
+<body data-theme="light">
     <!-- Navbar -->
     <nav class="navbar navbar-dark bg-dark">
         <div class="container-fluid">
             <span class="navbar-brand mb-0 h1">
-                <i class="fas fa-shield-alt"></i> XDPGuard Control Panel
+                <i class="fas fa-shield-alt"></i> Панель управления XDPGuard
             </span>
-            <span class="badge bg-success status-badge" id="status-badge">
-                <i class="fas fa-check-circle"></i> XDP Active
-            </span>
+            <div class="d-flex align-items-center">
+                <span class="theme-toggle me-3" onclick="toggleTheme()" title="Переключить тему">
+                    <i class="fas fa-moon" id="theme-icon"></i>
+                </span>
+                <span class="badge bg-success status-badge" id="status-badge">
+                    <i class="fas fa-check-circle"></i> XDP активен
+                </span>
+            </div>
         </div>
     </nav>
 
@@ -147,7 +263,7 @@
                         <div class="card stat-card">
                             <div class="card-body">
                                 <h6 class="card-subtitle mb-2 text-muted">
-                                    <i class="fas fa-network-wired"></i> Total Packets
+                                    <i class="fas fa-network-wired"></i> Всего пакетов
                                 </h6>
                                 <h3 class="card-title" id="packets-total">0</h3>
                             </div>
@@ -157,7 +273,7 @@
                         <div class="card stat-card danger">
                             <div class="card-body">
                                 <h6 class="card-subtitle mb-2 text-muted">
-                                    <i class="fas fa-times-circle"></i> Dropped
+                                    <i class="fas fa-times-circle"></i> Отброшено
                                 </h6>
                                 <h3 class="card-title text-danger" id="packets-dropped">0</h3>
                             </div>
@@ -167,7 +283,7 @@
                         <div class="card stat-card success">
                             <div class="card-body">
                                 <h6 class="card-subtitle mb-2 text-muted">
-                                    <i class="fas fa-check-circle"></i> Passed
+                                    <i class="fas fa-check-circle"></i> Пропущено
                                 </h6>
                                 <h3 class="card-title text-success" id="packets-passed">0</h3>
                             </div>
@@ -177,7 +293,7 @@
                         <div class="card stat-card warning">
                             <div class="card-body">
                                 <h6 class="card-subtitle mb-2 text-muted">
-                                    <i class="fas fa-ban"></i> Blocked IPs
+                                    <i class="fas fa-ban"></i> Заблокировано IP
                                 </h6>
                                 <h3 class="card-title text-warning" id="blocked-count">0</h3>
                             </div>
@@ -191,9 +307,9 @@
                         <div class="card">
                             <div class="card-body">
                                 <h6 class="card-subtitle mb-2 text-muted">
-                                    <i class="fas fa-tachometer-alt"></i> Throughput
+                                    <i class="fas fa-tachometer-alt"></i> Пропускная способность
                                 </h6>
-                                <h4 id="throughput">0 Mbps</h4>
+                                <h4 id="throughput">0 Мбит/с</h4>
                             </div>
                         </div>
                     </div>
@@ -201,7 +317,7 @@
                         <div class="card">
                             <div class="card-body">
                                 <h6 class="card-subtitle mb-2 text-muted">
-                                    <i class="fas fa-chart-line"></i> Drop Rate
+                                    <i class="fas fa-chart-line"></i> Процент отбрасывания
                                 </h6>
                                 <h4 id="drop-rate">0%</h4>
                             </div>
@@ -214,7 +330,7 @@
                     <div class="col-md-6">
                         <div class="card">
                             <div class="card-header">
-                                <h5><i class="fas fa-ban"></i> Block IP Address</h5>
+                                <h5><i class="fas fa-ban"></i> Блокировка IP-адреса</h5>
                             </div>
                             <div class="card-body">
                                 <div class="input-group mb-3">
@@ -222,10 +338,10 @@
                                            placeholder="192.168.1.100" 
                                            pattern="\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}">
                                     <button class="btn btn-danger" onclick="blockIP()">
-                                        <i class="fas fa-ban"></i> Block
+                                        <i class="fas fa-ban"></i> Заблокировать
                                     </button>
                                     <button class="btn btn-success" onclick="unblockIP()">
-                                        <i class="fas fa-check"></i> Unblock
+                                        <i class="fas fa-check"></i> Разблокировать
                                     </button>
                                 </div>
                             </div>
@@ -234,17 +350,17 @@
                     <div class="col-md-6">
                         <div class="card">
                             <div class="card-header">
-                                <h5><i class="fas fa-tools"></i> Quick Actions</h5>
+                                <h5><i class="fas fa-tools"></i> Быстрые действия</h5>
                             </div>
                             <div class="card-body">
                                 <button class="btn btn-primary me-2" onclick="refreshStats()">
-                                    <i class="fas fa-sync"></i> Refresh Stats
+                                    <i class="fas fa-sync"></i> Обновить статистику
                                 </button>
                                 <button class="btn btn-warning me-2" onclick="clearRateLimits()">
-                                    <i class="fas fa-eraser"></i> Clear Rate Limits
+                                    <i class="fas fa-eraser"></i> Очистить лимиты
                                 </button>
                                 <button class="btn btn-info" onclick="exportData()">
-                                    <i class="fas fa-download"></i> Export Data
+                                    <i class="fas fa-download"></i> Экспорт данных
                                 </button>
                             </div>
                         </div>
@@ -256,20 +372,20 @@
                     <div class="col-12">
                         <div class="card">
                             <div class="card-header">
-                                <h5><i class="fas fa-list"></i> Blocked IP Addresses</h5>
+                                <h5><i class="fas fa-list"></i> Заблокированные IP-адреса</h5>
                             </div>
                             <div class="card-body blocked-ips-table">
                                 <table class="table table-striped table-hover">
                                     <thead class="table-dark">
                                         <tr>
-                                            <th><i class="fas fa-hashtag"></i> #</th>
-                                            <th><i class="fas fa-network-wired"></i> IP Address</th>
-                                            <th><i class="fas fa-cog"></i> Actions</th>
+                                            <th><i class="fas fa-hashtag"></i> №</th>
+                                            <th><i class="fas fa-network-wired"></i> IP-адрес</th>
+                                            <th><i class="fas fa-cog"></i> Действия</th>
                                         </tr>
                                     </thead>
                                     <tbody id="blocked-table-body">
                                         <tr>
-                                            <td colspan="3" class="text-center">Loading...</td>
+                                            <td colspan="3" class="text-center">Загрузка...</td>
                                         </tr>
                                     </tbody>
                                 </table>
@@ -419,6 +535,34 @@
     
     <!-- Custom JavaScript -->
     <script>
+        // Theme management
+        function toggleTheme() {
+            const body = document.body;
+            const currentTheme = body.getAttribute('data-theme');
+            const newTheme = currentTheme === 'light' ? 'dark' : 'light';
+            body.setAttribute('data-theme', newTheme);
+            
+            const icon = document.getElementById('theme-icon');
+            if (newTheme === 'dark') {
+                icon.className = 'fas fa-sun';
+            } else {
+                icon.className = 'fas fa-moon';
+            }
+            
+            // Save preference
+            localStorage.setItem('theme', newTheme);
+        }
+        
+        // Load theme preference
+        (function() {
+            const savedTheme = localStorage.getItem('theme') || 'light';
+            document.body.setAttribute('data-theme', savedTheme);
+            const icon = document.getElementById('theme-icon');
+            if (savedTheme === 'dark') {
+                icon.className = 'fas fa-sun';
+            }
+        })();
+        
         // Global filters
         let currentEventTypeFilter = null;
         let currentSeverityFilter = null;
@@ -447,14 +591,14 @@
                         data.blocked_count || 0;
                     
                     const mbps = ((data.stats.bytes_total || 0) * 8 / 1000000).toFixed(2);
-                    document.getElementById('throughput').textContent = mbps + ' Mbps';
+                    document.getElementById('throughput').textContent = mbps + ' Мбит/с';
                     
                     const total = data.stats.packets_total || 1;
                     const dropped = data.stats.packets_dropped || 0;
                     const dropRate = ((dropped / total) * 100).toFixed(2);
                     document.getElementById('drop-rate').textContent = dropRate + '%';
                 })
-                .catch(err => console.error('Failed to fetch stats:', err));
+                .catch(err => console.error('Ошибка загрузки статистики:', err));
         }
 
         function loadBlockedIPs() {
@@ -465,7 +609,7 @@
                     tbody.innerHTML = '';
                     
                     if (!data.blocked_ips || data.blocked_ips.length === 0) {
-                        tbody.innerHTML = '<tr><td colspan="3" class="text-center">No blocked IPs</td></tr>';
+                        tbody.innerHTML = '<tr><td colspan="3" class="text-center">Нет заблокированных IP</td></tr>';
                         return;
                     }
                     
@@ -476,7 +620,7 @@
                                 <td><code>${ip}</code></td>
                                 <td>
                                     <button class="btn btn-sm btn-success" onclick="unblockIPDirect('${ip}')">
-                                        <i class="fas fa-check"></i> Unblock
+                                        <i class="fas fa-check"></i> Разблокировать
                                     </button>
                                 </td>
                             </tr>
@@ -484,7 +628,7 @@
                         tbody.innerHTML += row;
                     });
                 })
-                .catch(err => console.error('Failed to load blocked IPs:', err));
+                .catch(err => console.error('Ошибка загрузки заблокированных IP:', err));
         }
 
         function refreshEvents() {
@@ -502,7 +646,10 @@
                     const tbody = document.getElementById('events-table-body');
                     tbody.innerHTML = '';
                     
-                    document.getElementById('event-count-badge').textContent = data.count || 0;
+                    // Update badge with 1000+ limit
+                    const count = data.count || 0;
+                    document.getElementById('event-count-badge').textContent = 
+                        count > 1000 ? '1000+' : count;
                     
                     if (!data.events || data.events.length === 0) {
                         tbody.innerHTML = '<tr><td colspan="6" class="text-center">Событий нет</td></tr>';
@@ -533,7 +680,7 @@
                     // Сохраняем данные для модального окна
                     currentEventData = data.events;
                 })
-                .catch(err => console.error('Failed to load events:', err));
+                .catch(err => console.error('Ошибка загрузки событий:', err));
             
             // Update event statistics
             fetch('/api/events/stats')
@@ -546,7 +693,7 @@
                     document.getElementById('critical-count').textContent = stats.by_severity?.CRITICAL || 0;
                     document.getElementById('warning-count').textContent = stats.by_severity?.WARNING || 0;
                 })
-                .catch(err => console.error('Failed to load event stats:', err));
+                .catch(err => console.error('Ошибка загрузки статистики событий:', err));
         }
 
         function showEventDetails(index) {
@@ -630,11 +777,11 @@
                     alert(data.message);
                     refreshEvents();
                 } else {
-                    alert('Ошибка: ' + (data.error || 'Unknown error'));
+                    alert('Ошибка: ' + (data.error || 'Неизвестная ошибка'));
                 }
             })
             .catch(err => {
-                console.error('Error:', err);
+                console.error('Ошибка:', err);
                 alert('Не удалось очистить логи');
             });
         }
@@ -642,7 +789,7 @@
         function blockIP() {
             const ip = document.getElementById('ip-input').value;
             if (!ip) {
-                alert('Please enter an IP address');
+                alert('Введите IP-адрес');
                 return;
             }
             
@@ -654,25 +801,25 @@
             .then(res => res.json())
             .then(data => {
                 if (data.success) {
-                    alert(`IP ${ip} blocked successfully`);
+                    alert(`IP ${ip} успешно заблокирован`);
                     document.getElementById('ip-input').value = '';
                     refreshStats();
                     loadBlockedIPs();
                     refreshEvents();
                 } else {
-                    alert('Failed to block IP: ' + (data.error || 'Unknown error'));
+                    alert('Не удалось заблокировать IP: ' + (data.error || 'Неизвестная ошибка'));
                 }
             })
             .catch(err => {
-                console.error('Error:', err);
-                alert('Failed to block IP');
+                console.error('Ошибка:', err);
+                alert('Не удалось заблокировать IP');
             });
         }
 
         function unblockIP() {
             const ip = document.getElementById('ip-input').value;
             if (!ip) {
-                alert('Please enter an IP address');
+                alert('Введите IP-адрес');
                 return;
             }
             
@@ -688,23 +835,23 @@
             .then(res => res.json())
             .then(data => {
                 if (data.success) {
-                    alert(`IP ${ip} unblocked successfully`);
+                    alert(`IP ${ip} успешно разблокирован`);
                     document.getElementById('ip-input').value = '';
                     refreshStats();
                     loadBlockedIPs();
                     refreshEvents();
                 } else {
-                    alert('Failed to unblock IP: ' + (data.error || 'Unknown error'));
+                    alert('Не удалось разблокировать IP: ' + (data.error || 'Неизвестная ошибка'));
                 }
             })
             .catch(err => {
-                console.error('Error:', err);
-                alert('Failed to unblock IP');
+                console.error('Ошибка:', err);
+                alert('Не удалось разблокировать IP');
             });
         }
 
         function clearRateLimits() {
-            if (!confirm('Clear all rate limit counters?')) {
+            if (!confirm('Очистить все счётчики ограничения скорости?')) {
                 return;
             }
             
@@ -715,15 +862,15 @@
             .then(res => res.json())
             .then(data => {
                 if (data.success) {
-                    alert('Rate limits cleared');
+                    alert('Лимиты очищены');
                     refreshStats();
                 } else {
-                    alert('Failed to clear rate limits');
+                    alert('Не удалось очистить лимиты');
                 }
             })
             .catch(err => {
-                console.error('Error:', err);
-                alert('Failed to clear rate limits');
+                console.error('Ошибка:', err);
+                alert('Не удалось очистить лимиты');
             });
         }
 
@@ -739,7 +886,7 @@
                     link.download = 'xdpguard-stats-' + new Date().toISOString() + '.json';
                     link.click();
                 })
-                .catch(err => console.error('Export failed:', err));
+                .catch(err => console.error('Ошибка экспорта:', err));
         }
     </script>
 </body>
