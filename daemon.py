@@ -37,8 +37,9 @@ class XDPGuardDaemon:
 
     def __init__(self, config_path="/etc/xdpguard/config.yaml"):
         self.config = Config(config_path)
-        self.xdp_manager = XDPManager(self.config.config)
-        self.attack_detector = AttackDetector(self.xdp_manager, self.config.config)
+        # Pass Config object, not dict, to use config.get() method with dot notation
+        self.xdp_manager = XDPManager(self.config)
+        self.attack_detector = AttackDetector(self.xdp_manager, self.config)
         self.running = True
         
         # Setup signal handlers
