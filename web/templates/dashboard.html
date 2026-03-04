@@ -71,7 +71,7 @@
             box-shadow: 0 4px 12px rgba(255,193,7,0.3);
         }
         
-        .blocked-ips-table, .events-table {
+        .blocked-ips-table, .events-table, .packets-table {
             max-height: 500px;
             overflow-y: auto;
         }
@@ -90,13 +90,13 @@
             50% { opacity: 0.7; }
         }
         
-        .event-row {
+        .event-row, .packet-row {
             font-size: 0.9rem;
             cursor: pointer;
             transition: background-color 0.2s;
         }
         
-        .event-row:hover {
+        .event-row:hover, .packet-row:hover {
             background-color: var(--hover-bg) !important;
         }
         
@@ -120,12 +120,26 @@
             background-color: #2b4f5a;
         }
         
-        .event-timestamp {
+        [data-theme="light"] .packet-row.action-DROP {
+            background-color: #f8d7da;
+        }
+        [data-theme="light"] .packet-row.action-PASS {
+            background-color: #d1e7dd;
+        }
+        
+        [data-theme="dark"] .packet-row.action-DROP {
+            background-color: #5a2b2e;
+        }
+        [data-theme="dark"] .packet-row.action-PASS {
+            background-color: #2b5a3e;
+        }
+        
+        .event-timestamp, .packet-timestamp {
             font-family: monospace;
             font-size: 0.85rem;
         }
         
-        .event-badge {
+        .event-badge, .packet-badge {
             font-size: 0.75rem;
             padding: 0.25rem 0.5rem;
         }
@@ -177,14 +191,22 @@
             color: #0056b3;
         }
         
-        .theme-toggle {
+        .theme-toggle, .lang-toggle {
             cursor: pointer;
             font-size: 1.2rem;
             transition: transform 0.3s;
         }
         
-        .theme-toggle:hover {
+        .theme-toggle:hover, .lang-toggle:hover {
             transform: scale(1.1);
+        }
+        
+        .lang-toggle {
+            font-size: 1rem;
+            font-weight: bold;
+            padding: 0.25rem 0.5rem;
+            border: 2px solid #fff;
+            border-radius: 4px;
         }
         
         [data-theme="dark"] .table {
@@ -217,19 +239,22 @@
         }
     </style>
 </head>
-<body data-theme="light">
+<body data-theme="light" data-lang="ru">
     <!-- Navbar -->
     <nav class="navbar navbar-dark bg-dark">
         <div class="container-fluid">
             <span class="navbar-brand mb-0 h1">
-                <i class="fas fa-shield-alt"></i> Панель управления XDPGuard
+                <i class="fas fa-shield-alt"></i> <span data-i18n="title">Панель управления XDPGuard</span>
             </span>
             <div class="d-flex align-items-center">
-                <span class="theme-toggle me-3" onclick="toggleTheme()" title="Переключить тему">
+                <span class="lang-toggle me-3" onclick="toggleLanguage()" title="Switch Language / Сменить язык">
+                    <span id="lang-text">EN</span>
+                </span>
+                <span class="theme-toggle me-3" onclick="toggleTheme()" data-i18n-title="theme_toggle">
                     <i class="fas fa-moon" id="theme-icon"></i>
                 </span>
                 <span class="badge bg-success status-badge" id="status-badge">
-                    <i class="fas fa-check-circle"></i> XDP активен
+                    <i class="fas fa-check-circle"></i> <span data-i18n="xdp_active">XDP активен</span>
                 </span>
             </div>
         </div>
@@ -241,14 +266,21 @@
             <li class="nav-item" role="presentation">
                 <button class="nav-link active" id="dashboard-tab" data-bs-toggle="tab" 
                         data-bs-target="#dashboard" type="button" role="tab">
-                    <i class="fas fa-tachometer-alt"></i> Дашборд
+                    <i class="fas fa-tachometer-alt"></i> <span data-i18n="tab_dashboard">Дашборд</span>
                 </button>
             </li>
             <li class="nav-item" role="presentation">
                 <button class="nav-link" id="logs-tab" data-bs-toggle="tab" 
                         data-bs-target="#logs" type="button" role="tab">
-                    <i class="fas fa-list-alt"></i> Логи событий
+                    <i class="fas fa-list-alt"></i> <span data-i18n="tab_events">Логи событий</span>
                     <span class="badge bg-danger ms-2" id="event-count-badge">0</span>
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="packets-tab" data-bs-toggle="tab" 
+                        data-bs-target="#packets" type="button" role="tab">
+                    <i class="fas fa-network-wired"></i> <span data-i18n="tab_packets">Логи пакетов</span>
+                    <span class="badge bg-info ms-2" id="packet-count-badge">0</span>
                 </button>
             </li>
         </ul>
@@ -263,7 +295,7 @@
                         <div class="card stat-card">
                             <div class="card-body">
                                 <h6 class="card-subtitle mb-2 text-muted">
-                                    <i class="fas fa-network-wired"></i> Всего пакетов
+                                    <i class="fas fa-network-wired"></i> <span data-i18n="packets_total">Всего пакетов</span>
                                 </h6>
                                 <h3 class="card-title" id="packets-total">0</h3>
                             </div>
@@ -273,7 +305,7 @@
                         <div class="card stat-card danger">
                             <div class="card-body">
                                 <h6 class="card-subtitle mb-2 text-muted">
-                                    <i class="fas fa-times-circle"></i> Отброшено
+                                    <i class="fas fa-times-circle"></i> <span data-i18n="packets_dropped">Отброшено</span>
                                 </h6>
                                 <h3 class="card-title text-danger" id="packets-dropped">0</h3>
                             </div>
@@ -283,7 +315,7 @@
                         <div class="card stat-card success">
                             <div class="card-body">
                                 <h6 class="card-subtitle mb-2 text-muted">
-                                    <i class="fas fa-check-circle"></i> Пропущено
+                                    <i class="fas fa-check-circle"></i> <span data-i18n="packets_passed">Пропущено</span>
                                 </h6>
                                 <h3 class="card-title text-success" id="packets-passed">0</h3>
                             </div>
@@ -293,7 +325,7 @@
                         <div class="card stat-card warning">
                             <div class="card-body">
                                 <h6 class="card-subtitle mb-2 text-muted">
-                                    <i class="fas fa-ban"></i> Заблокировано IP
+                                    <i class="fas fa-ban"></i> <span data-i18n="blocked_ips">Заблокировано IP</span>
                                 </h6>
                                 <h3 class="card-title text-warning" id="blocked-count">0</h3>
                             </div>
@@ -307,7 +339,7 @@
                         <div class="card">
                             <div class="card-body">
                                 <h6 class="card-subtitle mb-2 text-muted">
-                                    <i class="fas fa-tachometer-alt"></i> Пропускная способность
+                                    <i class="fas fa-tachometer-alt"></i> <span data-i18n="throughput">Пропускная способность</span>
                                 </h6>
                                 <h4 id="throughput">0 Мбит/с</h4>
                             </div>
@@ -317,7 +349,7 @@
                         <div class="card">
                             <div class="card-body">
                                 <h6 class="card-subtitle mb-2 text-muted">
-                                    <i class="fas fa-chart-line"></i> Процент отбрасывания
+                                    <i class="fas fa-chart-line"></i> <span data-i18n="drop_rate">Процент отбрасывания</span>
                                 </h6>
                                 <h4 id="drop-rate">0%</h4>
                             </div>
@@ -330,7 +362,7 @@
                     <div class="col-md-6">
                         <div class="card">
                             <div class="card-header">
-                                <h5><i class="fas fa-ban"></i> Блокировка IP-адреса</h5>
+                                <h5><i class="fas fa-ban"></i> <span data-i18n="block_ip">Блокировка IP-адреса</span></h5>
                             </div>
                             <div class="card-body">
                                 <div class="input-group mb-3">
@@ -338,10 +370,10 @@
                                            placeholder="192.168.1.100" 
                                            pattern="\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}">
                                     <button class="btn btn-danger" onclick="blockIP()">
-                                        <i class="fas fa-ban"></i> Заблокировать
+                                        <i class="fas fa-ban"></i> <span data-i18n="btn_block">Заблокировать</span>
                                     </button>
                                     <button class="btn btn-success" onclick="unblockIP()">
-                                        <i class="fas fa-check"></i> Разблокировать
+                                        <i class="fas fa-check"></i> <span data-i18n="btn_unblock">Разблокировать</span>
                                     </button>
                                 </div>
                             </div>
@@ -350,17 +382,17 @@
                     <div class="col-md-6">
                         <div class="card">
                             <div class="card-header">
-                                <h5><i class="fas fa-tools"></i> Быстрые действия</h5>
+                                <h5><i class="fas fa-tools"></i> <span data-i18n="quick_actions">Быстрые действия</span></h5>
                             </div>
                             <div class="card-body">
                                 <button class="btn btn-primary me-2" onclick="refreshStats()">
-                                    <i class="fas fa-sync"></i> Обновить статистику
+                                    <i class="fas fa-sync"></i> <span data-i18n="btn_refresh">Обновить статистику</span>
                                 </button>
                                 <button class="btn btn-warning me-2" onclick="clearRateLimits()">
-                                    <i class="fas fa-eraser"></i> Очистить лимиты
+                                    <i class="fas fa-eraser"></i> <span data-i18n="btn_clear_limits">Очистить лимиты</span>
                                 </button>
                                 <button class="btn btn-info" onclick="exportData()">
-                                    <i class="fas fa-download"></i> Экспорт данных
+                                    <i class="fas fa-download"></i> <span data-i18n="btn_export">Экспорт данных</span>
                                 </button>
                             </div>
                         </div>
@@ -372,20 +404,20 @@
                     <div class="col-12">
                         <div class="card">
                             <div class="card-header">
-                                <h5><i class="fas fa-list"></i> Заблокированные IP-адреса</h5>
+                                <h5><i class="fas fa-list"></i> <span data-i18n="blocked_list">Заблокированные IP-адреса</span></h5>
                             </div>
                             <div class="card-body blocked-ips-table">
                                 <table class="table table-striped table-hover">
                                     <thead class="table-dark">
                                         <tr>
                                             <th><i class="fas fa-hashtag"></i> №</th>
-                                            <th><i class="fas fa-network-wired"></i> IP-адрес</th>
-                                            <th><i class="fas fa-cog"></i> Действия</th>
+                                            <th><i class="fas fa-network-wired"></i> <span data-i18n="ip_address">IP-адрес</span></th>
+                                            <th><i class="fas fa-cog"></i> <span data-i18n="actions">Действия</span></th>
                                         </tr>
                                     </thead>
                                     <tbody id="blocked-table-body">
                                         <tr>
-                                            <td colspan="3" class="text-center">Загрузка...</td>
+                                            <td colspan="3" class="text-center" data-i18n="loading">Загрузка...</td>
                                         </tr>
                                     </tbody>
                                 </table>
@@ -402,7 +434,7 @@
                     <div class="col-md-8">
                         <div class="btn-group" role="group">
                             <button type="button" class="btn btn-outline-primary" onclick="filterEvents('all')">
-                                <i class="fas fa-list"></i> Все
+                                <i class="fas fa-list"></i> <span data-i18n="filter_all">Все</span>
                             </button>
                             <button type="button" class="btn btn-outline-danger" onclick="filterEvents('BLOCK')">
                                 <i class="fas fa-ban"></i> BLOCK
@@ -423,7 +455,7 @@
                         
                         <div class="btn-group ms-2" role="group">
                             <button type="button" class="btn btn-outline-secondary" onclick="filterSeverity('all')">
-                                Все
+                                <span data-i18n="filter_all">Все</span>
                             </button>
                             <button type="button" class="btn btn-outline-danger" onclick="filterSeverity('CRITICAL')">
                                 CRITICAL
@@ -438,10 +470,10 @@
                     </div>
                     <div class="col-md-4 text-end">
                         <button class="btn btn-warning" onclick="clearEvents()">
-                            <i class="fas fa-trash"></i> Очистить логи
+                            <i class="fas fa-trash"></i> <span data-i18n="btn_clear_logs">Очистить логи</span>
                         </button>
                         <button class="btn btn-primary" onclick="refreshEvents()">
-                            <i class="fas fa-sync"></i> Обновить
+                            <i class="fas fa-sync"></i> <span data-i18n="btn_refresh">Обновить</span>
                         </button>
                     </div>
                 </div>
@@ -453,10 +485,10 @@
                             <div class="card-body">
                                 <div class="row">
                                     <div class="col-md-2">
-                                        <strong>Всего:</strong> <span id="total-events">0</span>
+                                        <strong data-i18n="total">Всего:</strong> <span id="total-events">0</span>
                                     </div>
                                     <div class="col-md-2">
-                                        <strong>За час:</strong> <span id="events-last-hour">0</span>
+                                        <strong data-i18n="per_hour">За час:</strong> <span id="events-last-hour">0</span>
                                     </div>
                                     <div class="col-md-2">
                                         <strong>ATTACK:</strong> <span class="text-danger" id="attack-count">0</span>
@@ -481,23 +513,129 @@
                     <div class="col-12">
                         <div class="card">
                             <div class="card-header">
-                                <h5><i class="fas fa-stream"></i> События безопасности (SIEM)</h5>
+                                <h5><i class="fas fa-stream"></i> <span data-i18n="events_security">События безопасности (SIEM)</span></h5>
                             </div>
                             <div class="card-body events-table">
                                 <table class="table table-sm table-hover">
                                     <thead class="table-dark">
                                         <tr>
-                                            <th style="width: 160px">Время</th>
-                                            <th style="width: 100px">Тип</th>
-                                            <th style="width: 100px">Уровень</th>
+                                            <th style="width: 160px" data-i18n="time">Время</th>
+                                            <th style="width: 100px" data-i18n="type">Тип</th>
+                                            <th style="width: 100px" data-i18n="level">Уровень</th>
                                             <th style="width: 130px">IP</th>
-                                            <th>Сообщение</th>
+                                            <th data-i18n="message">Сообщение</th>
                                             <th style="width: 50px"><i class="fas fa-info-circle"></i></th>
                                         </tr>
                                     </thead>
                                     <tbody id="events-table-body">
                                         <tr>
-                                            <td colspan="6" class="text-center">Загрузка...</td>
+                                            <td colspan="6" class="text-center" data-i18n="loading">Загрузка...</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Packets Tab (NEW) -->
+            <div class="tab-pane fade" id="packets" role="tabpanel">
+                <!-- Packet Filters -->
+                <div class="row mb-3">
+                    <div class="col-md-8">
+                        <div class="btn-group" role="group">
+                            <button type="button" class="btn btn-outline-primary" onclick="filterPackets('all')">
+                                <i class="fas fa-list"></i> <span data-i18n="filter_all">Все</span>
+                            </button>
+                            <button type="button" class="btn btn-outline-success" onclick="filterPackets('PASS')">
+                                <i class="fas fa-check"></i> PASS
+                            </button>
+                            <button type="button" class="btn btn-outline-danger" onclick="filterPackets('DROP')">
+                                <i class="fas fa-times"></i> DROP
+                            </button>
+                        </div>
+                        
+                        <div class="btn-group ms-2" role="group">
+                            <button type="button" class="btn btn-outline-secondary" onclick="filterProtocol('all')">
+                                <span data-i18n="filter_all">Все</span>
+                            </button>
+                            <button type="button" class="btn btn-outline-info" onclick="filterProtocol('TCP')">
+                                TCP
+                            </button>
+                            <button type="button" class="btn btn-outline-info" onclick="filterProtocol('UDP')">
+                                UDP
+                            </button>
+                            <button type="button" class="btn btn-outline-info" onclick="filterProtocol('ICMP')">
+                                ICMP
+                            </button>
+                        </div>
+                    </div>
+                    <div class="col-md-4 text-end">
+                        <button class="btn btn-warning" onclick="clearPacketLogs()">
+                            <i class="fas fa-trash"></i> <span data-i18n="btn_clear_logs">Очистить логи</span>
+                        </button>
+                        <button class="btn btn-primary" onclick="refreshPackets()">
+                            <i class="fas fa-sync"></i> <span data-i18n="btn_refresh">Обновить</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Packet Statistics -->
+                <div class="row mb-3">
+                    <div class="col-md-12">
+                        <div class="card">
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-md-2">
+                                        <strong data-i18n="total">Всего:</strong> <span id="total-packets-logged">0</span>
+                                    </div>
+                                    <div class="col-md-2">
+                                        <strong>TCP:</strong> <span id="tcp-count">0</span>
+                                    </div>
+                                    <div class="col-md-2">
+                                        <strong>UDP:</strong> <span id="udp-count">0</span>
+                                    </div>
+                                    <div class="col-md-2">
+                                        <strong>ICMP:</strong> <span id="icmp-count">0</span>
+                                    </div>
+                                    <div class="col-md-2">
+                                        <strong class="text-success">PASS:</strong> <span id="pass-count">0</span>
+                                    </div>
+                                    <div class="col-md-2">
+                                        <strong class="text-danger">DROP:</strong> <span id="drop-packet-count">0</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Packets Table -->
+                <div class="row">
+                    <div class="col-12">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5><i class="fas fa-network-wired"></i> <span data-i18n="packet_logs">Логи сетевых пакетов</span></h5>
+                            </div>
+                            <div class="card-body packets-table">
+                                <table class="table table-sm table-hover">
+                                    <thead class="table-dark">
+                                        <tr>
+                                            <th style="width: 160px" data-i18n="time">Время</th>
+                                            <th style="width: 140px" data-i18n="src_ip">Src IP</th>
+                                            <th style="width: 140px" data-i18n="dst_ip">Dst IP</th>
+                                            <th style="width: 80px" data-i18n="protocol">Протокол</th>
+                                            <th style="width: 70px" data-i18n="src_port">Src Port</th>
+                                            <th style="width: 70px" data-i18n="dst_port">Dst Port</th>
+                                            <th style="width: 80px" data-i18n="size">Размер</th>
+                                            <th style="width: 80px" data-i18n="action">Действие</th>
+                                            <th style="width: 50px"><i class="fas fa-info-circle"></i></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="packets-table-body">
+                                        <tr>
+                                            <td colspan="9" class="text-center" data-i18n="loading">Загрузка...</td>
                                         </tr>
                                     </tbody>
                                 </table>
@@ -514,15 +652,36 @@
         <div class="modal-dialog modal-lg">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title"><i class="fas fa-info-circle"></i> Детали события</h5>
+                    <h5 class="modal-title"><i class="fas fa-info-circle"></i> <span data-i18n="event_details">Детали события</span></h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
-                    <h6>Полные данные события (JSON):</h6>
+                    <h6 data-i18n="full_data">Полные данные события (JSON):</h6>
                     <div class="json-viewer" id="event-json"></div>
                     <div class="mt-3">
                         <button class="btn btn-sm btn-secondary" onclick="copyEventJSON()">
-                            <i class="fas fa-copy"></i> Скопировать JSON
+                            <i class="fas fa-copy"></i> <span data-i18n="btn_copy">Скопировать JSON</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Packet Details Modal -->
+    <div class="modal fade" id="packetDetailsModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="fas fa-info-circle"></i> <span data-i18n="packet_details">Детали пакета</span></h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <h6 data-i18n="full_data">Полные данные пакета (JSON):</h6>
+                    <div class="json-viewer" id="packet-json"></div>
+                    <div class="mt-3">
+                        <button class="btn btn-sm btn-secondary" onclick="copyPacketJSON()">
+                            <i class="fas fa-copy"></i> <span data-i18n="btn_copy">Скопировать JSON</span>
                         </button>
                     </div>
                 </div>
@@ -535,6 +694,131 @@
     
     <!-- Custom JavaScript -->
     <script>
+        // Internationalization
+        const translations = {
+            ru: {
+                title: "Панель управления XDPGuard",
+                xdp_active: "XDP активен",
+                tab_dashboard: "Дашборд",
+                tab_events: "Логи событий",
+                tab_packets: "Логи пакетов",
+                packets_total: "Всего пакетов",
+                packets_dropped: "Отброшено",
+                packets_passed: "Пропущено",
+                blocked_ips: "Заблокировано IP",
+                throughput: "Пропускная способность",
+                drop_rate: "Процент отбрасывания",
+                block_ip: "Блокировка IP-адреса",
+                btn_block: "Заблокировать",
+                btn_unblock: "Разблокировать",
+                quick_actions: "Быстрые действия",
+                btn_refresh: "Обновить",
+                btn_clear_limits: "Очистить лимиты",
+                btn_export: "Экспорт данных",
+                blocked_list: "Заблокированные IP-адреса",
+                ip_address: "IP-адрес",
+                actions: "Действия",
+                loading: "Загрузка...",
+                filter_all: "Все",
+                btn_clear_logs: "Очистить логи",
+                total: "Всего",
+                per_hour: "За час",
+                events_security: "События безопасности (SIEM)",
+                time: "Время",
+                type: "Тип",
+                level: "Уровень",
+                message: "Сообщение",
+                event_details: "Детали события",
+                packet_details: "Детали пакета",
+                full_data: "Полные данные (JSON):",
+                btn_copy: "Скопировать JSON",
+                packet_logs: "Логи сетевых пакетов",
+                src_ip: "Src IP",
+                dst_ip: "Dst IP",
+                protocol: "Протокол",
+                src_port: "Src Port",
+                dst_port: "Dst Port",
+                size: "Размер",
+                action: "Действие",
+                theme_toggle: "Переключить тему"
+            },
+            en: {
+                title: "XDPGuard Control Panel",
+                xdp_active: "XDP Active",
+                tab_dashboard: "Dashboard",
+                tab_events: "Event Logs",
+                tab_packets: "Packet Logs",
+                packets_total: "Total Packets",
+                packets_dropped: "Dropped",
+                packets_passed: "Passed",
+                blocked_ips: "Blocked IPs",
+                throughput: "Throughput",
+                drop_rate: "Drop Rate",
+                block_ip: "Block IP Address",
+                btn_block: "Block",
+                btn_unblock: "Unblock",
+                quick_actions: "Quick Actions",
+                btn_refresh: "Refresh",
+                btn_clear_limits: "Clear Limits",
+                btn_export: "Export Data",
+                blocked_list: "Blocked IP Addresses",
+                ip_address: "IP Address",
+                actions: "Actions",
+                loading: "Loading...",
+                filter_all: "All",
+                btn_clear_logs: "Clear Logs",
+                total: "Total",
+                per_hour: "Per Hour",
+                events_security: "Security Events (SIEM)",
+                time: "Time",
+                type: "Type",
+                level: "Level",
+                message: "Message",
+                event_details: "Event Details",
+                packet_details: "Packet Details",
+                full_data: "Full Data (JSON):",
+                btn_copy: "Copy JSON",
+                packet_logs: "Network Packet Logs",
+                src_ip: "Src IP",
+                dst_ip: "Dst IP",
+                protocol: "Protocol",
+                src_port: "Src Port",
+                dst_port: "Dst Port",
+                size: "Size",
+                action: "Action",
+                theme_toggle: "Toggle Theme"
+            }
+        };
+
+        function updateLanguage(lang) {
+            document.querySelectorAll('[data-i18n]').forEach(el => {
+                const key = el.getAttribute('data-i18n');
+                if (translations[lang] && translations[lang][key]) {
+                    el.textContent = translations[lang][key];
+                }
+            });
+            
+            document.querySelectorAll('[data-i18n-title]').forEach(el => {
+                const key = el.getAttribute('data-i18n-title');
+                if (translations[lang] && translations[lang][key]) {
+                    el.setAttribute('title', translations[lang][key]);
+                }
+            });
+        }
+
+        function toggleLanguage() {
+            const body = document.body;
+            const currentLang = body.getAttribute('data-lang');
+            const newLang = currentLang === 'ru' ? 'en' : 'ru';
+            body.setAttribute('data-lang', newLang);
+            
+            const langText = document.getElementById('lang-text');
+            langText.textContent = newLang === 'ru' ? 'EN' : 'RU';
+            
+            updateLanguage(newLang);
+            localStorage.setItem('language', newLang);
+        }
+
         // Theme management
         function toggleTheme() {
             const body = document.body;
@@ -549,11 +833,10 @@
                 icon.className = 'fas fa-moon';
             }
             
-            // Save preference
             localStorage.setItem('theme', newTheme);
         }
         
-        // Load theme preference
+        // Load preferences
         (function() {
             const savedTheme = localStorage.getItem('theme') || 'light';
             document.body.setAttribute('data-theme', savedTheme);
@@ -561,21 +844,32 @@
             if (savedTheme === 'dark') {
                 icon.className = 'fas fa-sun';
             }
+            
+            const savedLang = localStorage.getItem('language') || 'ru';
+            document.body.setAttribute('data-lang', savedLang);
+            const langText = document.getElementById('lang-text');
+            langText.textContent = savedLang === 'ru' ? 'EN' : 'RU';
+            updateLanguage(savedLang);
         })();
         
         // Global filters
         let currentEventTypeFilter = null;
         let currentSeverityFilter = null;
+        let currentPacketActionFilter = null;
+        let currentProtocolFilter = null;
         let currentEventData = null;
+        let currentPacketData = null;
         
-        // Auto-refresh every 2 seconds
+        // Auto-refresh
         setInterval(refreshStats, 2000);
         setInterval(refreshEvents, 3000);
+        setInterval(refreshPackets, 2000);
         
         // Initial load
         refreshStats();
         loadBlockedIPs();
         refreshEvents();
+        refreshPackets();
 
         function refreshStats() {
             fetch('/api/status')
@@ -598,7 +892,7 @@
                     const dropRate = ((dropped / total) * 100).toFixed(2);
                     document.getElementById('drop-rate').textContent = dropRate + '%';
                 })
-                .catch(err => console.error('Ошибка загрузки статистики:', err));
+                .catch(err => console.error('Error loading stats:', err));
         }
 
         function loadBlockedIPs() {
@@ -609,7 +903,9 @@
                     tbody.innerHTML = '';
                     
                     if (!data.blocked_ips || data.blocked_ips.length === 0) {
-                        tbody.innerHTML = '<tr><td colspan="3" class="text-center">Нет заблокированных IP</td></tr>';
+                        const lang = document.body.getAttribute('data-lang');
+                        const msg = lang === 'en' ? 'No blocked IPs' : 'Нет заблокированных IP';
+                        tbody.innerHTML = `<tr><td colspan="3" class="text-center">${msg}</td></tr>`;
                         return;
                     }
                     
@@ -620,7 +916,7 @@
                                 <td><code>${ip}</code></td>
                                 <td>
                                     <button class="btn btn-sm btn-success" onclick="unblockIPDirect('${ip}')">
-                                        <i class="fas fa-check"></i> Разблокировать
+                                        <i class="fas fa-check"></i> <span data-i18n="btn_unblock">${document.body.getAttribute('data-lang') === 'en' ? 'Unblock' : 'Разблокировать'}</span>
                                     </button>
                                 </td>
                             </tr>
@@ -628,7 +924,7 @@
                         tbody.innerHTML += row;
                     });
                 })
-                .catch(err => console.error('Ошибка загрузки заблокированных IP:', err));
+                .catch(err => console.error('Error loading blocked IPs:', err));
         }
 
         function refreshEvents() {
@@ -646,13 +942,14 @@
                     const tbody = document.getElementById('events-table-body');
                     tbody.innerHTML = '';
                     
-                    // Update badge with 1000+ limit
                     const count = data.count || 0;
                     document.getElementById('event-count-badge').textContent = 
                         count > 1000 ? '1000+' : count;
                     
                     if (!data.events || data.events.length === 0) {
-                        tbody.innerHTML = '<tr><td colspan="6" class="text-center">Событий нет</td></tr>';
+                        const lang = document.body.getAttribute('data-lang');
+                        const msg = lang === 'en' ? 'No events' : 'Событий нет';
+                        tbody.innerHTML = `<tr><td colspan="6" class="text-center">${msg}</td></tr>`;
                         return;
                     }
                     
@@ -677,12 +974,10 @@
                         tbody.innerHTML += row;
                     });
                     
-                    // Сохраняем данные для модального окна
                     currentEventData = data.events;
                 })
-                .catch(err => console.error('Ошибка загрузки событий:', err));
+                .catch(err => console.error('Error loading events:', err));
             
-            // Update event statistics
             fetch('/api/events/stats')
                 .then(res => res.json())
                 .then(stats => {
@@ -693,24 +988,103 @@
                     document.getElementById('critical-count').textContent = stats.by_severity?.CRITICAL || 0;
                     document.getElementById('warning-count').textContent = stats.by_severity?.WARNING || 0;
                 })
-                .catch(err => console.error('Ошибка загрузки статистики событий:', err));
+                .catch(err => console.error('Error loading event stats:', err));
+        }
+
+        function refreshPackets() {
+            let url = '/api/packets?limit=100';
+            if (currentPacketActionFilter) {
+                url += `&action=${currentPacketActionFilter}`;
+            }
+            if (currentProtocolFilter) {
+                url += `&protocol=${currentProtocolFilter}`;
+            }
+            
+            fetch(url)
+                .then(res => res.json())
+                .then(data => {
+                    const tbody = document.getElementById('packets-table-body');
+                    tbody.innerHTML = '';
+                    
+                    const count = data.count || 0;
+                    document.getElementById('packet-count-badge').textContent = 
+                        count > 1000 ? '1000+' : count;
+                    
+                    if (!data.packets || data.packets.length === 0) {
+                        const lang = document.body.getAttribute('data-lang');
+                        const msg = lang === 'en' ? 'No packets logged' : 'Логов нет';
+                        tbody.innerHTML = `<tr><td colspan="9" class="text-center">${msg}</td></tr>`;
+                        return;
+                    }
+                    
+                    data.packets.forEach((packet, index) => {
+                        const timestamp = new Date(packet.timestamp).toLocaleString('ru-RU');
+                        const actionClass = `action-${packet.action}`;
+                        const actionBadge = getActionBadge(packet.action);
+                        const protocolBadge = getProtocolBadge(packet.protocol);
+                        
+                        const row = `
+                            <tr class="packet-row ${actionClass}" onclick="showPacketDetails(${index})" data-packet='${JSON.stringify(packet).replace(/'/g, "&apos;")}'>
+                                <td class="packet-timestamp">${timestamp}</td>
+                                <td><code>${packet.src_ip}</code></td>
+                                <td><code>${packet.dst_ip}</code></td>
+                                <td>${protocolBadge}</td>
+                                <td>${packet.src_port || '-'}</td>
+                                <td>${packet.dst_port || '-'}</td>
+                                <td>${packet.size} B</td>
+                                <td>${actionBadge}</td>
+                                <td class="text-center">
+                                    <i class="fas fa-eye clickable-icon"></i>
+                                </td>
+                            </tr>
+                        `;
+                        tbody.innerHTML += row;
+                    });
+                    
+                    currentPacketData = data.packets;
+                })
+                .catch(err => console.error('Error loading packets:', err));
+            
+            fetch('/api/packets/stats')
+                .then(res => res.json())
+                .then(stats => {
+                    document.getElementById('total-packets-logged').textContent = stats.total || 0;
+                    document.getElementById('tcp-count').textContent = stats.by_protocol?.TCP || 0;
+                    document.getElementById('udp-count').textContent = stats.by_protocol?.UDP || 0;
+                    document.getElementById('icmp-count').textContent = stats.by_protocol?.ICMP || 0;
+                    document.getElementById('pass-count').textContent = stats.by_action?.PASS || 0;
+                    document.getElementById('drop-packet-count').textContent = stats.by_action?.DROP || 0;
+                })
+                .catch(err => console.error('Error loading packet stats:', err));
         }
 
         function showEventDetails(index) {
             if (!currentEventData || !currentEventData[index]) {
-                alert('Данные события не найдены');
+                alert('Event data not found');
                 return;
             }
             
             const event = currentEventData[index];
             const jsonFormatted = JSON.stringify(event, null, 2);
-            
-            // Подсветка синтаксиса JSON
             const highlighted = syntaxHighlight(jsonFormatted);
             document.getElementById('event-json').innerHTML = highlighted;
             
-            // Открываем модальное окно
             const modal = new bootstrap.Modal(document.getElementById('eventDetailsModal'));
+            modal.show();
+        }
+
+        function showPacketDetails(index) {
+            if (!currentPacketData || !currentPacketData[index]) {
+                alert('Packet data not found');
+                return;
+            }
+            
+            const packet = currentPacketData[index];
+            const jsonFormatted = JSON.stringify(packet, null, 2);
+            const highlighted = syntaxHighlight(jsonFormatted);
+            document.getElementById('packet-json').innerHTML = highlighted;
+            
+            const modal = new bootstrap.Modal(document.getElementById('packetDetailsModal'));
             modal.show();
         }
 
@@ -724,10 +1098,17 @@
         function copyEventJSON() {
             const jsonText = document.getElementById('event-json').innerText;
             navigator.clipboard.writeText(jsonText).then(() => {
-                alert('Скопировано в буфер обмена!');
-            }).catch(err => {
-                console.error('Ошибка копирования:', err);
-            });
+                const lang = document.body.getAttribute('data-lang');
+                alert(lang === 'en' ? 'Copied to clipboard!' : 'Скопировано в буфер обмена!');
+            }).catch(err => console.error('Copy error:', err));
+        }
+
+        function copyPacketJSON() {
+            const jsonText = document.getElementById('packet-json').innerText;
+            navigator.clipboard.writeText(jsonText).then(() => {
+                const lang = document.body.getAttribute('data-lang');
+                alert(lang === 'en' ? 'Copied to clipboard!' : 'Скопировано в буфер обмена!');
+            }).catch(err => console.error('Copy error:', err));
         }
 
         function getSeverityBadge(severity) {
@@ -752,6 +1133,28 @@
             return `${icons[type] || ''} <span class="event-badge">${type}</span>`;
         }
 
+        function getActionBadge(action) {
+            const colors = {
+                'PASS': 'success',
+                'DROP': 'danger'
+            };
+            const icons = {
+                'PASS': '<i class="fas fa-check"></i>',
+                'DROP': '<i class="fas fa-times"></i>'
+            };
+            return `${icons[action] || ''} <span class="badge bg-${colors[action] || 'secondary'} packet-badge">${action}</span>`;
+        }
+
+        function getProtocolBadge(protocol) {
+            const colors = {
+                'TCP': 'primary',
+                'UDP': 'info',
+                'ICMP': 'warning',
+                'OTHER': 'secondary'
+            };
+            return `<span class="badge bg-${colors[protocol] || 'secondary'}">${protocol}</span>`;
+        }
+
         function filterEvents(type) {
             currentEventTypeFilter = type === 'all' ? null : type;
             refreshEvents();
@@ -762,10 +1165,20 @@
             refreshEvents();
         }
 
+        function filterPackets(action) {
+            currentPacketActionFilter = action === 'all' ? null : action;
+            refreshPackets();
+        }
+
+        function filterProtocol(protocol) {
+            currentProtocolFilter = protocol === 'all' ? null : protocol;
+            refreshPackets();
+        }
+
         function clearEvents() {
-            if (!confirm('Очистить все события?')) {
-                return;
-            }
+            const lang = document.body.getAttribute('data-lang');
+            const msg = lang === 'en' ? 'Clear all events?' : 'Очистить все события?';
+            if (!confirm(msg)) return;
             
             fetch('/api/events/clear', {
                 method: 'POST',
@@ -777,19 +1190,44 @@
                     alert(data.message);
                     refreshEvents();
                 } else {
-                    alert('Ошибка: ' + (data.error || 'Неизвестная ошибка'));
+                    alert('Error: ' + (data.error || 'Unknown error'));
                 }
             })
             .catch(err => {
-                console.error('Ошибка:', err);
-                alert('Не удалось очистить логи');
+                console.error('Error:', err);
+                alert('Failed to clear logs');
+            });
+        }
+
+        function clearPacketLogs() {
+            const lang = document.body.getAttribute('data-lang');
+            const msg = lang === 'en' ? 'Clear all packet logs?' : 'Очистить все логи пакетов?';
+            if (!confirm(msg)) return;
+            
+            fetch('/api/packets/clear', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    alert(data.message);
+                    refreshPackets();
+                } else {
+                    alert('Error: ' + (data.error || 'Unknown error'));
+                }
+            })
+            .catch(err => {
+                console.error('Error:', err);
+                alert('Failed to clear packet logs');
             });
         }
 
         function blockIP() {
             const ip = document.getElementById('ip-input').value;
+            const lang = document.body.getAttribute('data-lang');
             if (!ip) {
-                alert('Введите IP-адрес');
+                alert(lang === 'en' ? 'Enter IP address' : 'Введите IP-адрес');
                 return;
             }
             
@@ -801,25 +1239,27 @@
             .then(res => res.json())
             .then(data => {
                 if (data.success) {
-                    alert(`IP ${ip} успешно заблокирован`);
+                    const msg = lang === 'en' ? `IP ${ip} blocked successfully` : `IP ${ip} успешно заблокирован`;
+                    alert(msg);
                     document.getElementById('ip-input').value = '';
                     refreshStats();
                     loadBlockedIPs();
                     refreshEvents();
                 } else {
-                    alert('Не удалось заблокировать IP: ' + (data.error || 'Неизвестная ошибка'));
+                    alert('Failed to block IP: ' + (data.error || 'Unknown error'));
                 }
             })
             .catch(err => {
-                console.error('Ошибка:', err);
-                alert('Не удалось заблокировать IP');
+                console.error('Error:', err);
+                alert('Failed to block IP');
             });
         }
 
         function unblockIP() {
             const ip = document.getElementById('ip-input').value;
+            const lang = document.body.getAttribute('data-lang');
             if (!ip) {
-                alert('Введите IP-адрес');
+                alert(lang === 'en' ? 'Enter IP address' : 'Введите IP-адрес');
                 return;
             }
             
@@ -827,6 +1267,7 @@
         }
 
         function unblockIPDirect(ip) {
+            const lang = document.body.getAttribute('data-lang');
             fetch('/api/unblock', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -835,25 +1276,26 @@
             .then(res => res.json())
             .then(data => {
                 if (data.success) {
-                    alert(`IP ${ip} успешно разблокирован`);
+                    const msg = lang === 'en' ? `IP ${ip} unblocked successfully` : `IP ${ip} успешно разблокирован`;
+                    alert(msg);
                     document.getElementById('ip-input').value = '';
                     refreshStats();
                     loadBlockedIPs();
                     refreshEvents();
                 } else {
-                    alert('Не удалось разблокировать IP: ' + (data.error || 'Неизвестная ошибка'));
+                    alert('Failed to unblock IP: ' + (data.error || 'Unknown error'));
                 }
             })
             .catch(err => {
-                console.error('Ошибка:', err);
-                alert('Не удалось разблокировать IP');
+                console.error('Error:', err);
+                alert('Failed to unblock IP');
             });
         }
 
         function clearRateLimits() {
-            if (!confirm('Очистить все счётчики ограничения скорости?')) {
-                return;
-            }
+            const lang = document.body.getAttribute('data-lang');
+            const msg = lang === 'en' ? 'Clear all rate limit counters?' : 'Очистить все счётчики ограничения скорости?';
+            if (!confirm(msg)) return;
             
             fetch('/api/clear-rate-limits', {
                 method: 'POST',
@@ -862,15 +1304,16 @@
             .then(res => res.json())
             .then(data => {
                 if (data.success) {
-                    alert('Лимиты очищены');
+                    const successMsg = lang === 'en' ? 'Limits cleared' : 'Лимиты очищены';
+                    alert(successMsg);
                     refreshStats();
                 } else {
-                    alert('Не удалось очистить лимиты');
+                    alert('Failed to clear limits');
                 }
             })
             .catch(err => {
-                console.error('Ошибка:', err);
-                alert('Не удалось очистить лимиты');
+                console.error('Error:', err);
+                alert('Failed to clear limits');
             });
         }
 
@@ -886,7 +1329,7 @@
                     link.download = 'xdpguard-stats-' + new Date().toISOString() + '.json';
                     link.click();
                 })
-                .catch(err => console.error('Ошибка экспорта:', err));
+                .catch(err => console.error('Export error:', err));
         }
     </script>
 </body>
