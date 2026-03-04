@@ -17,6 +17,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from python.config import Config
 from python.xdpmanager import XDPManager
 from python.attack_detector import AttackDetector
+from python.bpf_config_loader import update_bpf_config
 from web.app import create_app
 
 # Setup logging
@@ -59,6 +60,14 @@ class XDPGuardDaemon:
                 sys.exit(1)
             
             logger.info("✓ XDP program loaded successfully")
+            
+            # IMPORTANT: Update BPF maps with config after XDP is loaded
+            logger.info("Updating BPF configuration from config.yaml...")
+            if update_bpf_config(self.config):
+                logger.info("✓ BPF configuration updated successfully")
+            else:
+                logger.warning("⚠ Failed to update BPF configuration - using defaults")
+            
         except Exception as e:
             logger.error(f"Failed to initialize XDP: {e}")
             sys.exit(1)
