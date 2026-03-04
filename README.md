@@ -1,441 +1,358 @@
-# XDPGuard - XDP/eBPF DDoS Protection System
+# XDPGuard - High-Performance DDoS Protection
 
-⚡ **Высокопроизводительная система защиты от DDoS атак на базе XDP/eBPF для Linux**
+🛡️ **XDP/eBPF-based DDoS protection system for Linux** with real-time configuration and web dashboard.
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Platform](https://img.shields.io/badge/platform-Linux-blue.svg)](https://www.linux.org/)
-[![Kernel](https://img.shields.io/badge/kernel-4.18+-green.svg)](https://www.kernel.org/)
+## ✨ Key Features
 
-## 🚀 Возможности
+- **🚀 Ultra-fast packet filtering** at kernel level using XDP/eBPF
+- **⚙️ Runtime configuration** - change rate limits without recompiling!
+- **📊 Web Dashboard** with real-time statistics (Russian/English, Dark theme)
+- **📈 Three monitoring tabs**: Dashboard, Event Logs, Packet Logs
+- **🤖 Automatic attack detection** and IP blocking
+- **✅ Whitelist support** to protect trusted IPs
+- **📦 One-command installation** with automatic dependency management
 
-- ⚡ **Экстремальная производительность** - фильтрация до 26 млн пакетов/сек благодаря XDP
-- 🛡️ **Многоуровневая защита** - SYN flood, UDP flood, ICMP flood, Connection flood
-- 🎯 **Умная блокировка** - Автоматическое обнаружение и блокировка атак
-- 📊 **Веб-панель управления** - Красивый веб-интерфейс с real-time статистикой
-- 🌙 **Тёмная тема** - Переключатель светлой/тёмной темы
-- 💻 **CLI инструменты** - Полный набор команд для управления
-- 🔧 **Гибкая настройка** - YAML конфигурация с множеством параметров
-- 🐧 **Поддержка Linux** - Ubuntu, Debian, CentOS, RHEL, Fedora
-- 🔄 **Режимы работы** - Router и Bridge mode
-- 📈 **Статистика** - Детальная статистика трафика и атак
+## 🔥 What's New v2.0
 
-## 📍 Оглавление
+✅ **Runtime config sync** - XDP limits update from config.yaml automatically  
+✅ **ConfigSync module** - applies settings to BPF maps without recompilation  
+✅ **Makefile** - automatic XDP compilation with dependency checking  
+✅ **install.sh** - one-command installation script  
+✅ **Optimized defaults** - 1000 SYN/sec (was 30) to prevent blocking legitimate traffic  
 
-- [📎 Требования](#-требования)
-- [📦 Установка](#-быстрая-установка)
-- [🔄 Обновление](#-обновление-системы)
-- [⚙️ Настройка](#️-настройка)
-- [🎮 Использование](#-использование)
-- [🔍 Проверка](#-проверка-работоспособности)
-- [🛠️ Устранение проблем](#️-устранение-проблем)
+## 💻 Quick Start
 
-## 📎 Требования
-
-- **Linux** kernel 4.18+ (рекомендуется 5.4+)
-- **Поддерживаемые ОС:**
-  - Ubuntu 20.04+
-  - Debian 11+
-  - CentOS 8+
-  - RHEL 8+
-  - Fedora 32+
-  - Kali Linux
-- **Зависимости:**
-  - clang/LLVM
-  - libbpf
-  - Python 3.8+
-  - iproute2
-  - bpftool
-- **Память:** минимум 2 GB RAM
-- **Root права** для загрузки XDP программ
-
-## 📦 Быстрая установка
-
-### Автоматическая установка
+### One-Command Installation
 
 ```bash
-# Клонируйте репозиторий
+# Clone repository
 git clone https://github.com/chirkovap/xdpguard.git
 cd xdpguard
 
-# Запустите установочный скрипт
-sudo bash scripts/install.sh
+# Run installer (automatically installs dependencies, compiles XDP, sets up service)
+sudo ./install.sh
 
-# Настройте конфигурацию
-sudo nano /etc/xdpguard/config.yaml
-# ВАЖНО: Измените 'interface' на ваш сетевой интерфейс (узнать: ip link show)
-
-# Запустите сервис
+# Start service
 sudo systemctl start xdpguard
-sudo systemctl status xdpguard
+sudo systemctl enable xdpguard  # Auto-start on boot
+
+# Access web interface
+# Open browser: http://YOUR_IP:8080
 ```
 
-### Ручная установка
+That's it! 🎉 The system is now protecting your server.
+
+## 🔧 Manual Installation
+
+If you prefer manual control:
+
+### 1. Install Dependencies
 
 ```bash
-# 1. Установите зависимости
-
-# Ubuntu/Debian
 sudo apt update
-sudo apt install -y python3 python3-pip clang llvm libelf-dev libbpf-dev make git curl iproute2 linux-tools-common
-sudo apt install -y python3-flask python3-yaml python3-click python3-requests python3-psutil
+sudo apt install -y python3 python3-pip clang llvm gcc make \
+    libbpf-dev linux-headers-$(uname -r) bpftool iproute2
 
-# CentOS/RHEL/Fedora
-sudo yum install -y python3 python3-pip clang llvm elfutils-libelf-devel libbpf-devel make git curl iproute bpftool
-sudo yum install -y python3-flask python3-pyyaml python3-click python3-requests python3-psutil
+pip3 install flask pyyaml scapy
+```
 
-# 2. Клонируйте репозиторий
-git clone https://github.com/chirkovap/xdpguard.git
-cd xdpguard
+### 2. Compile XDP Program
 
-# 3. Скомпилируйте XDP программу
-cd bpf
+```bash
+make              # Compile XDP program
+sudo make install # Install to /usr/lib/xdpguard/
+```
+
+### 3. Configure
+
+```bash
+# Copy config
+sudo mkdir -p /etc/xdpguard
+sudo cp config/config.yaml /etc/xdpguard/
+
+# Edit config (set your network interface!)
+sudo nano /etc/xdpguard/config.yaml
+```
+
+### 4. Install Service
+
+```bash
+# Copy files
+sudo mkdir -p /opt/xdpguard
+sudo cp -r python web daemon.py /opt/xdpguard/
+
+# Create systemd service
+sudo nano /etc/systemd/system/xdpguard.service
+```
+
+Paste:
+```ini
+[Unit]
+Description=XDPGuard DDoS Protection Service
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/xdpguard
+ExecStart=/usr/bin/python3 /opt/xdpguard/daemon.py
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+```
+
+```bash
+# Start service
+sudo systemctl daemon-reload
+sudo systemctl start xdpguard
+sudo systemctl enable xdpguard
+```
+
+## ⚙️ Configuration
+
+### Important: Runtime Configuration
+
+**XDPGuard v2.0+ supports runtime configuration!** You can change rate limits in `config.yaml` and they will be applied automatically when the service starts.
+
+### Key Settings in `/etc/xdpguard/config.yaml`:
+
+```yaml
+network:
+  interface: ens33        # Change to your interface (ip link show)
+  xdp_mode: xdpgeneric   # xdpgeneric, xdpdrv, or xdpoffload
+
+protection:
+  enabled: true
+  syn_rate: 1000         # SYN packets/sec per IP (default: 1000)
+  syn_burst: 2000        # Burst allowance
+  conn_rate: 1000        # Connections/sec
+  udp_rate: 500          # UDP packets/sec
+  icmp_rate: 100         # ICMP packets/sec
+
+whitelist_ips:
+  - 127.0.0.1           # Localhost
+  - 192.168.0.0/16      # Private networks
+  - 10.0.0.0/8
+  # Add your management IPs here!
+
+logging:
+  enable_packet_logging: true  # Show packets in web UI
+  max_packets: 10000
+
+web:
+  host: 0.0.0.0         # Web interface host
+  port: 8080            # Web interface port
+```
+
+### ⚠️ Important: Whitelist Your IPs!
+
+Always add your management IPs to the whitelist to prevent locking yourself out:
+
+```yaml
+whitelist_ips:
+  - 127.0.0.1
+  - 192.168.146.0/24    # Your subnet
+  - YOUR_PUBLIC_IP      # Your management IP
+```
+
+### After Config Changes
+
+```bash
+# Just restart the service - config is auto-synced!
+sudo systemctl restart xdpguard
+
+# Check logs to verify config sync
+sudo journalctl -u xdpguard --since "10 seconds ago" | grep "Синхронизация"
+```
+
+You should see:
+```
+Синхронизация конфигурации с XDP...
+✓ SYN rate limit: 1000
+✓ UDP rate limit: 500
+✓ ICMP rate limit: 100
+✓ Конфигурация успешно синхронизирована с XDP
+```
+
+## 🔍 Monitoring
+
+### Web Dashboard
+
+Access: `http://YOUR_IP:8080`
+
+**Three tabs:**
+1. **📊 Dashboard** - Real-time statistics, drop rate, throughput
+2. **📝 Event Logs** - Attack events, blocks, system events
+3. **📦 Packet Logs** - Individual packet captures with details
+
+### Command Line
+
+```bash
+# View logs
+sudo journalctl -u xdpguard -f
+
+# Check statistics via API
+curl http://localhost:8080/api/status
+curl http://localhost:8080/api/packets?limit=10
+curl http://localhost:8080/api/events?limit=20
+
+# Check XDP is loaded
+sudo ip link show YOUR_INTERFACE | grep xdp
+
+# View BPF maps
+sudo bpftool map dump name stats_map
+sudo bpftool map dump name blacklist
+sudo bpftool map dump name config_map
+```
+
+## 🧪 Testing
+
+### Generate Test Traffic
+
+```bash
+# From another machine, test with hping3
+sudo hping3 -S -p 80 --flood YOUR_SERVER_IP
+
+# Or simple ping flood
+ping -f YOUR_SERVER_IP
+```
+
+### Manual IP Blocking
+
+```bash
+# Block IP via API
+curl -X POST http://localhost:8080/api/block \
+  -H "Content-Type: application/json" \
+  -d '{"ip": "192.168.1.100", "reason": "test"}'
+
+# Unblock IP
+curl -X POST http://localhost:8080/api/unblock \
+  -H "Content-Type: application/json" \
+  -d '{"ip": "192.168.1.100"}'
+
+# View blocked IPs
+curl http://localhost:8080/api/blacklist
+```
+
+## 🛠️ Troubleshooting
+
+### SSH/Web Becomes Unreachable After XDP Load
+
+**Problem:** Rate limits are too aggressive and block legitimate traffic.
+
+**Solution:**
+```bash
+# 1. Disable XDP immediately (from console or SSH if still accessible)
+sudo ip link set dev YOUR_INTERFACE xdp off
+
+# 2. Add your IPs to whitelist
+sudo nano /etc/xdpguard/config.yaml
+# Add your management subnet:
+whitelist_ips:
+  - 192.168.146.0/24
+
+# 3. Restart service (config will auto-sync)
+sudo systemctl restart xdpguard
+```
+
+### Config Changes Not Applied
+
+**Check if config sync worked:**
+```bash
+sudo journalctl -u xdpguard --since "1 minute ago" | grep -i sync
+```
+
+You should see:
+- "Синхронизация конфигурации с XDP..."
+- "✓ SYN rate limit: 1000" (your value)
+- "✓ Конфигурация успешно синхронизирована"
+
+### XDP Won't Load
+
+```bash
+# Check if XDP file exists
+ls -lh /usr/lib/xdpguard/xdp_filter.o
+
+# If not, recompile:
+cd /opt/xdpguard  # or your clone directory
 sudo make clean
 sudo make
 sudo make install
-cd ..
 
-# 4. Настройте систему
-sudo mkdir -p /etc/xdpguard /var/lib/xdpguard /var/log
-sudo cp config.yaml /etc/xdpguard/
+# Restart service
+sudo systemctl restart xdpguard
+```
 
-# ВАЖНО: Отредактируйте конфиг!
+### High Drop Rate (>50%)
+
+**Symptoms:** Dashboard shows >50% packets dropped, SSH lags.
+
+**Cause:** Rate limits too low for your traffic.
+
+**Fix:**
+```bash
 sudo nano /etc/xdpguard/config.yaml
-# Измените:
-# - interface: на ваш интерфейс (найти: ip link show)
-# - xdp_mode: xdpgeneric (для совместимости)
-
-# 5. Установите сервис
-sudo cp -r python web daemon.py cli.py /opt/xdpguard/
-sudo cp systemd/xdpguard.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable xdpguard
-sudo systemctl start xdpguard
-```
-
-## 🔄 Обновление системы
-
-### Автоматическое обновление (рекомендуется)
-
-```bash
-# Скачайте и запустите скрипт обновления
-cd /opt/xdpguard
-sudo wget https://raw.githubusercontent.com/chirkovap/xdpguard/main/update.sh -O update.sh
-sudo chmod +x update.sh
-sudo ./update.sh
-```
-
-Скрипт автоматически:
-- ✅ Проверит наличие обновлений
-- ✅ Остановит сервис XDPGuard
-- ✅ Применит изменения из GitHub
-- ✅ Очистит Python кэш
-- ✅ Запустит сервис заново
-- ✅ Покажет список изменений
-
-### Ручное обновление
-
-```bash
-cd /opt/xdpguard
-
-# Остановите сервис
-sudo systemctl stop xdpguard
-
-# Получите обновления
-sudo git fetch origin
-sudo git reset --hard origin/main
-
-# Очистите кэш
-sudo rm -rf python/__pycache__
-sudo find . -name "*.pyc" -delete
-
-# Запустите сервис
-sudo systemctl start xdpguard
-sudo systemctl status xdpguard
-```
-
-### Проверка версии
-
-```bash
-# Проверить текущую версию
-cd /opt/xdpguard
-git log -1 --oneline
-
-# Посмотреть последние изменения
-git log --oneline -5
-```
-
-## ⚙️ Настройка
-
-### Основные параметры конфигурации
-
-Откройте `/etc/xdpguard/config.yaml`:
-
-```yaml
-network:
-  interface: eth0           # ← Ваш сетевой интерфейс
-  xdp_mode: xdpgeneric     # xdpgeneric (совместимость) или xdpdrv (производительность)
-  
+# Increase limits:
 protection:
-  enabled: true
-  syn_rate: 30             # SYN пакетов/сек на IP
-  conn_rate: 100           # Новых соединений/сек на IP
-  udp_rate: 50             # UDP пакетов/сек на IP
+  syn_rate: 2000      # Increase
+  conn_rate: 2000
+  udp_rate: 1000
+  
+# Add your subnet to whitelist
+whitelist_ips:
+  - YOUR_SUBNET/24
 
-blacklist:
-  enabled: true
-  auto_block_threshold: 1000  # Автоблокировка при превышении
-  block_duration: 3600        # Длительность блокировки (секунды)
-
-web:
-  host: 0.0.0.0
-  port: 8080
-  secret_key: "измените-этот-ключ"  # ← Обязательно измените!
-```
-
-### Режимы загрузки XDP
-
-```yaml
-network:
-  xdp_mode: xdpgeneric  # или xdpdrv, или xdpoffload
-```
-
-- **xdpgeneric** - Generic/SKB mode (самый совместимый, работает всегда)
-- **xdpdrv** - Native driver mode (быстрый, требует поддержки драйвера)
-- **xdpoffload** - Hardware offload (самый быстрый, требует поддержки NIC)
-
-**Рекомендация:** Начните с `xdpgeneric`, затем попробуйте `xdpdrv`.
-
-## 🎮 Использование
-
-### Веб-панель управления
-
-Откройте в браузере:
-```
-http://your-server-ip:8080
-```
-
-Возможности панели:
-- 📊 Real-time статистика пакетов
-- 🚫 Блокировка/разблокировка IP адресов
-- 📋 Список заблокированных IP
-- ⚙️ Управление настройками
-- 📈 Графики трафика
-- 🌙 **Тёмная тема** - переключатель в правом верхнем углу (иконка луны/солнца)
-
-### CLI команды
-
-```bash
-# Проверить статус
-python3 /opt/xdpguard/cli.py status
-
-# Заблокировать IP
-python3 /opt/xdpguard/cli.py block 192.168.1.100
-
-# Разблокировать IP
-python3 /opt/xdpguard/cli.py unblock 192.168.1.100
-
-# Список заблокированных IP
-python3 /opt/xdpguard/cli.py list-blocked
-
-# Очистить счётчики rate limit
-python3 /opt/xdpguard/cli.py clear-rate-limits
-
-# Экспорт статистики
-python3 /opt/xdpguard/cli.py export -o stats.json
-```
-
-### Systemd команды
-
-```bash
-# Запуск
-sudo systemctl start xdpguard
-
-# Остановка
-sudo systemctl stop xdpguard
-
-# Перезапуск
-sudo systemctl restart xdpguard
-
-# Статус
-sudo systemctl status xdpguard
-
-# Логи
-sudo journalctl -u xdpguard -f
-
-# Автозапуск
-sudo systemctl enable xdpguard
-```
-
-## 🔍 Проверка работоспособности
-
-```bash
-# 1. Проверьте, что сервис запущен
-sudo systemctl status xdpguard
-
-# 2. Проверьте, что XDP загружен на интерфейсе
-sudo ip link show <your-interface> | grep xdp
-# Должно показать "xdp" или "xdpgeneric"
-
-# 3. Проверьте BPF программы
-sudo bpftool prog show
-# Должна быть программа типа xdp
-
-# 4. Проверьте BPF карты
-sudo bpftool map show
-# Должны быть карты: blacklist, rate_limit, stats_map
-
-# 5. Проверьте статистику вручную
-sudo bpftool map dump name stats_map
-# Должны быть ненулевые значения packets_total при наличии трафика
-
-# 6. Проверьте веб-интерфейс
-curl http://localhost:8080/api/status
-
-# 7. Проверьте сеть
-sudo bpftool net show
-```
-
-## 📊 Производительность
-
-| Режим | Производительность | Совместимость | Использование |
-|-------|-------------------|---------------|---------------|
-| **xdpgeneric** | ~1-2 Mpps | ✅ Все системы | Тестирование, совместимость |
-| **xdpdrv** | ~10-20 Mpps | ⚠️ Требует драйвер | Production (рекомендуется) |
-| **xdpoffload** | ~26+ Mpps | ❌ Требует NIC | High-load production |
-
-## 🛠️ Устранение проблем
-
-### XDP не загружается
-
-```bash
-# Проверьте, что XDP программа скомпилирована
-ls -la /usr/lib/xdpguard/xdp_filter.o
-
-# Если нет, перекомпилируйте:
-cd /opt/xdpguard/bpf
-sudo make clean && sudo make && sudo make install
-
-# Попробуйте загрузить в generic режиме
-sudo nano /etc/xdpguard/config.yaml
-# Измените: xdp_mode: xdpgeneric
 sudo systemctl restart xdpguard
 ```
 
-### Ошибка BTF
+## 📚 Architecture
 
-```bash
-# Установите bpftool
-sudo apt install linux-tools-$(uname -r) linux-tools-common
+### How It Works
 
-# Или загрузите в generic режиме (не требует BTF)
-sudo ip link set dev <interface> xdpgeneric obj /usr/lib/xdpguard/xdp_filter.o sec xdp
+1. **XDP Program (bpf/xdp_filter.c)** - Runs at NIC driver level, filters packets in kernel
+2. **ConfigSync (python/config_sync.py)** - Syncs config.yaml to BPF maps via bpftool
+3. **XDPManager (python/xdpmanager.py)** - Manages XDP lifecycle, statistics, blocking
+4. **Web Dashboard (web/)** - Flask-based UI for monitoring
+5. **Daemon (daemon.py)** - Main service orchestrator
+
+### Config Flow
+
+```
+config.yaml → ConfigSync → BPF config_map → XDP program
+     ↑                                           ↓
+     User edits                         Packet filtering (kernel)
 ```
 
-### Сервис не запускается
+**Key Benefit:** No recompilation needed! Just edit config.yaml and restart service.
 
-```bash
-# Проверьте логи
-sudo journalctl -u xdpguard -n 100 --no-pager
+## 📝 API Endpoints
 
-# Проверьте конфигурацию
-sudo python3 -c "import yaml; yaml.safe_load(open('/etc/xdpguard/config.yaml'))"
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/status` | GET | System statistics |
+| `/api/events` | GET | Event logs |
+| `/api/packets` | GET | Packet logs |
+| `/api/packets/stats` | GET | Packet statistics |
+| `/api/blacklist` | GET | Blocked IPs |
+| `/api/block` | POST | Block IP |
+| `/api/unblock` | POST | Unblock IP |
 
-# Проверьте интерфейс
-ip link show
-```
+## 🤝 Contributing
 
-### Веб-панель недоступна
+Contributions are welcome! Please:
+1. Fork the repository
+2. Create a feature branch
+3. Submit a pull request
 
-```bash
-# Проверьте, что Flask работает
-sudo netstat -tlnp | grep 8080
+## 📜 License
 
-# Проверьте firewall
-sudo ufw status
-sudo ufw allow 8080
+GPL-3.0 License - See LICENSE file
 
-# Или для firewalld
-sudo firewall-cmd --add-port=8080/tcp --permanent
-sudo firewall-cmd --reload
-```
+## 📧 Contact
 
-### Статистика показывает 0
-
-```bash
-# Проверьте что XDP загружен
-sudo bpftool prog show | grep xdp
-
-# Проверьте статистику напрямую из BPF карты
-sudo bpftool map dump name stats_map
-
-# Должны быть ненулевые значения на одном из CPU
-# Если есть - обновите код до последней версии:
-cd /opt/xdpguard
-sudo ./update.sh
-```
-
-### Блокировка IP не работает
-
-```bash
-# Проверьте карту blacklist
-sudo bpftool map show | grep blacklist
-
-# Попробуйте добавить IP вручную
-sudo bpftool map update name blacklist key hex c0 a8 01 64 value hex 01
-# (для IP 192.168.1.100: c0=192, a8=168, 01=1, 64=100)
-
-# Проверьте что IP добавлен
-sudo bpftool map dump name blacklist
-```
-
-## 📚 Документация
-
-- [Архитектура системы](docs/architecture.md)
-- [Руководство по настройке](docs/configuration.md)
-- [API документация](docs/api.md)
-- [Разработка и вклад](CONTRIBUTING.md)
-- [Быстрый старт](QUICKSTART.md)
-
-## 🤝 Вклад в проект
-
-Мы приветствуем любой вклад! См. [CONTRIBUTING.md](CONTRIBUTING.md)
-
-### Приоритетные задачи
-
-- [ ] IPv6 поддержка
-- [ ] Prometheus/Grafana интеграция
-- [ ] Telegram/Email уведомления
-- [ ] Geo-IP фильтрация
-- [ ] Unit тесты
-- [ ] Docker контейнер
-- [ ] Helm chart для Kubernetes
-
-## 📝 Лицензия
-
-MIT License - см. [LICENSE](LICENSE)
-
-## 👨‍💻 Автор
-
-**chirkovap**
-
-- GitHub: [@chirkovap](https://github.com/chirkovap)
-- Проект: [XDPGuard](https://github.com/chirkovap/xdpguard)
-
-## 🙏 Благодарности
-
-- Linux Kernel BPF команда
-- IOVisor Project (BCC)
-- Cloudflare (за вдохновение архитектурой)
-- Сообщество eBPF
-
-## 📧 Поддержка
-
-Если у вас возникли проблемы или вопросы:
-
-1. Проверьте [Issues](https://github.com/chirkovap/xdpguard/issues)
-2. Создайте новый Issue с подробным описанием
-3. Приложите логи: `sudo journalctl -u xdpguard -n 100`
+For issues and questions, please use GitHub Issues.
 
 ---
 
-⭐ **Если проект был полезен, поставьте звёздочку!**
+**Made with ❤️ by chirkovap**
