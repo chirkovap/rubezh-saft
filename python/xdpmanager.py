@@ -15,6 +15,7 @@ import json
 import time
 from pathlib import Path
 from python.event_logger import EventLogger
+from python.packet_logger import PacketLogger
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +32,10 @@ class XDPManager:
         
         # Initialize event logger
         self.event_logger = EventLogger(max_events=1000)
+        
+        # Initialize packet logger
+        max_packets = config.get('logging.max_packets', 10000)
+        self.packet_logger = PacketLogger(max_packets=max_packets)
         
         # Track previous stats for delta calculations
         self.prev_stats = {
@@ -320,6 +325,8 @@ class XDPManager:
         except:
             return False
     
+    # ========== EVENT LOGGER METHODS ==========
+    
     def get_events(self, limit=100, event_type=None, severity=None):
         """Получить события из event logger"""
         return self.event_logger.get_events(limit, event_type, severity)
@@ -333,3 +340,43 @@ class XDPManager:
         with self.event_logger.lock:
             events = list(self.event_logger.events)
         return list(reversed(events))[:limit]
+    
+    # ========== PACKET LOGGER METHODS ==========
+    
+    def get_packet_logs(self, limit=100, action=None, protocol=None):
+        """Получить логи пакетов"""
+        return self.packet_logger.get_packets(limit, action, protocol)
+    
+    def get_packet_stats(self):
+        """Получить статистику логов пакетов"""
+        return self.packet_logger.get_stats()
+    
+    def simulate_packet_logs(self):
+        """
+        Симуляция логов пакетов для тестирования.
+        Удалить после интеграции с реальным eBPF.
+        """
+        import random
+        
+        protocols = ['TCP', 'UDP', 'ICMP']
+        actions = ['PASS', 'DROP']
+        
+        # Генерируем 10 случайных пакетов
+        for _ in range(10):
+            src_ip = f"{random.randint(1,223)}.{random.randint(0,255)}.{random.randint(0,255)}.{random.randint(1,254)}"
+            dst_ip = f"{random.randint(1,223)}.{random.randint(0,255)}.{random.randint(0,255)}.{random.randint(1,254)}"
+            protocol = random.choice(protocols)
+            action = random.choice(actions)
+            
+            self.packet_logger.log_packet(
+                src_ip=src_ip,
+                dst_ip=dst_ip,
+                protocol=protocol,
+                src_port=random.randint(1024, 65535) if protocol != 'ICMP' else None,
+                dst_port=random.randint(1, 1024) if protocol != 'ICMP' else None,
+                size=random.randint(64, 1500),
+                action=action,
+                reason='rate_limit' if action == 'DROP' else None
+            )
+            
+            time.sleep(0.1)
