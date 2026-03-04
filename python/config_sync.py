@@ -1,19 +1,19 @@
 #!/usr/bin/env python3
 """
-XDPGuard Config Synchronization
+Configuration Synchronization Module
 
-Synchronizes config.yaml with BPF maps in runtime.
-This allows changing rate limits without recompiling XDP program.
+Syncs config.yaml values to XDP BPF maps in real-time.
+This allows dynamic rate limit changes without XDP recompilation.
 """
 
 import logging
 import subprocess
-import ipaddress
 import struct
+import ipaddress
 
 logger = logging.getLogger(__name__)
 
-# Configuration keys for BPF config_map
+# Config map keys (must match xdp_filter.c)
 CFG_SYN_RATE = 0
 CFG_UDP_RATE = 1
 CFG_ICMP_RATE = 2
@@ -21,110 +21,128 @@ CFG_ENABLED = 3
 
 
 class ConfigSync:
-    """Synchronizes Python config with XDP BPF maps"""
+    """Synchronizes YAML config to XDP BPF maps"""
     
     def __init__(self):
-        self.synced = False
+        logger.info("ConfigSync initialized")
     
     def sync_config_to_xdp(self, config):
         """
-        Synchronize config.yaml values to XDP config_map.
-        This updates rate limits in real-time without recompilation.
+        Synchronize config.yaml values to XDP config_map
+        
+        This updates BPF maps so XDP uses new rate limits immediately
+        without requiring recompilation or reload.
         """
         try:
-            logger.info("Синхронизация конфига с XDP...")
-            
-            # Get values from config
+            # Get rate limits from config
             syn_rate = config.get('protection.syn_rate', 1000)
             udp_rate = config.get('protection.udp_rate', 500)
             icmp_rate = config.get('protection.icmp_rate', 100)
             enabled = 1 if config.get('protection.enabled', True) else 0
             
-            # Update BPF config_map using bpftool
-            updates = [
-                (CFG_SYN_RATE, syn_rate, "SYN rate limit"),
-                (CFG_UDP_RATE, udp_rate, "UDP rate limit"),
-                (CFG_ICMP_RATE, icmp_rate, "ICMP rate limit"),
-                (CFG_ENABLED, enabled, "Protection enabled")
-            ]
+            logger.info(f"Syncing config: SYN={syn_rate}, UDP={udp_rate}, ICMP={icmp_rate}, Enabled={enabled}")
             
-            for key, value, desc in updates:
-                success = self._update_config_map(key, value)
-                if success:
-                    logger.info(f"✓ {desc}: {value}")
-                else:
-                    logger.warning(f"✗ Failed to update {desc}")
+            # Update config_map with new values
+            success = True
+            success &= self._update_config_value(CFG_SYN_RATE, syn_rate)
+            success &= self._update_config_value(CFG_UDP_RATE, udp_rate)
+            success &= self._update_config_value(CFG_ICMP_RATE, icmp_rate)
+            success &= self._update_config_value(CFG_ENABLED, enabled)
+            
+            if success:
+                logger.info("✓ Rate limits synced to XDP successfully")
+            else:
+                logger.warning("⚠ Some config values failed to sync")
             
             # Sync whitelist
-            self._sync_whitelist(config)
+            if self._sync_whitelist(config):
+                logger.info("✓ Whitelist synced to XDP")
+            else:
+                logger.warning("⚠ Whitelist sync failed")
             
-            self.synced = True
-            logger.info("✓ Конфигурация успешно синхронизирована с XDP")
-            return True
+            return success
             
         except Exception as e:
             logger.error(f"Failed to sync config to XDP: {e}")
             return False
     
-    def _update_config_map(self, key, value):
+    def _update_config_value(self, key, value):
         """
-        Update single entry in BPF config_map.
-        Uses bpftool to update the map.
+        Update a single config_map entry using bpftool
+        
+        Args:
+            key: Config map key (0-3)
+            value: Value to set (integer)
         """
         try:
-            # Convert key and value to hex
-            key_bytes = struct.pack('I', key)  # 4 bytes (u32)
-            value_bytes = struct.pack('Q', value)  # 8 bytes (u64)
+            # Convert key to hex
+            key_hex = [f'{b:02x}' for b in struct.pack('I', key)]
             
-            key_hex = ' '.join([f'{b:02x}' for b in key_bytes])
-            value_hex = ' '.join([f'{b:02x}' for b in value_bytes])
+            # Convert value to 64-bit unsigned integer (little endian)
+            value_bytes = struct.pack('<Q', int(value))
+            value_hex = [f'{b:02x}' for b in value_bytes]
             
-            cmd = [
-                'sudo', 'bpftool', 'map', 'update',
-                'name', 'config_map',
-                'key', 'hex'] + key_hex.split() + [
-                'value', 'hex'] + value_hex.split()
+            # Update map using bpftool
+            cmd = ['sudo', 'bpftool', 'map', 'update', 'name', 'config_map',
+                   'key', 'hex'] + key_hex + ['value', 'hex'] + value_hex
             
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
-            return result.returncode == 0
             
+            if result.returncode == 0:
+                logger.debug(f"Config key {key} = {value} updated")
+                return True
+            else:
+                logger.error(f"Failed to update config key {key}: {result.stderr}")
+                return False
+                
         except Exception as e:
-            logger.debug(f"Error updating config_map[{key}]: {e}")
+            logger.error(f"Error updating config key {key}: {e}")
             return False
     
     def _sync_whitelist(self, config):
         """
-        Synchronize whitelist IPs from config to XDP whitelist map.
-        Whitelisted IPs bypass all filtering.
+        Sync whitelist IPs from config to XDP whitelist map
         """
         try:
             whitelist_ips = config.get('whitelist_ips', [])
+            
             if not whitelist_ips:
-                return
+                logger.info("No whitelist IPs to sync")
+                return True
             
-            logger.info(f"Синхронизация whitelist ({len(whitelist_ips)} записей)...")
-            
-            for ip_or_network in whitelist_ips:
+            success_count = 0
+            for ip_str in whitelist_ips:
                 try:
-                    # Handle both single IPs and CIDR networks
-                    network = ipaddress.ip_network(ip_or_network, strict=False)
-                    
-                    # Add each IP in the network to whitelist
-                    for ip in network:
-                        if ip.version == 4:  # Only IPv4 for now
-                            self._add_to_whitelist(str(ip))
+                    # Handle CIDR notation
+                    if '/' in ip_str:
+                        network = ipaddress.ip_network(ip_str, strict=False)
+                        # Add all IPs in network (limited to reasonable size)
+                        if network.num_addresses > 256:
+                            logger.warning(f"Network {ip_str} too large, skipping")
+                            continue
+                        
+                        for ip in network.hosts():
+                            if self._add_whitelist_ip(str(ip)):
+                                success_count += 1
+                    else:
+                        # Single IP
+                        if self._add_whitelist_ip(ip_str):
+                            success_count += 1
                             
-                except ValueError as e:
-                    logger.warning(f"Invalid IP/network in whitelist: {ip_or_network}")
+                except Exception as e:
+                    logger.error(f"Failed to parse whitelist IP {ip_str}: {e}")
+                    continue
             
-            logger.info("✓ Whitelist синхронизирован")
+            logger.info(f"Added {success_count} IPs to whitelist")
+            return success_count > 0
             
         except Exception as e:
             logger.error(f"Failed to sync whitelist: {e}")
+            return False
     
-    def _add_to_whitelist(self, ip_address):
+    def _add_whitelist_ip(self, ip_address):
         """
-        Add single IP to XDP whitelist map.
+        Add a single IP to whitelist map
         """
         try:
             ip_obj = ipaddress.ip_address(ip_address)
@@ -135,75 +153,95 @@ class ConfigSync:
             cmd = ['sudo', 'bpftool', 'map', 'update', 'name', 'whitelist',
                    'key', 'hex'] + key_hex + ['value', 'hex', '01']
             
-            subprocess.run(cmd, capture_output=True, text=True, timeout=2)
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+            
+            if result.returncode == 0:
+                logger.debug(f"Whitelisted IP: {ip_address}")
+                return True
+            return False
             
         except Exception as e:
-            logger.debug(f"Error adding {ip_address} to whitelist: {e}")
+            logger.error(f"Failed to whitelist IP {ip_address}: {e}")
+            return False
     
-    def get_current_config_from_xdp(self):
+    def verify_sync(self, config):
         """
-        Read current configuration from XDP config_map.
-        Useful for verification.
+        Verify that config values match XDP map values
         """
         try:
+            # Dump config_map
             result = subprocess.run(
                 ['sudo', 'bpftool', 'map', 'dump', 'name', 'config_map', '-j'],
                 capture_output=True, text=True, timeout=5
             )
             
-            if result.returncode == 0:
-                import json
-                data = json.loads(result.stdout)
-                
-                config_values = {}
-                for entry in data:
-                    key = entry.get('key', [0])[0] if isinstance(entry.get('key'), list) else entry.get('key', 0)
-                    value = entry.get('value', [0])[0] if isinstance(entry.get('value'), list) else entry.get('value', 0)
-                    
-                    if key == CFG_SYN_RATE:
-                        config_values['syn_rate'] = value
-                    elif key == CFG_UDP_RATE:
-                        config_values['udp_rate'] = value
-                    elif key == CFG_ICMP_RATE:
-                        config_values['icmp_rate'] = value
-                    elif key == CFG_ENABLED:
-                        config_values['enabled'] = bool(value)
-                
-                return config_values
+            if result.returncode != 0:
+                logger.warning("Could not verify config sync")
+                return False
             
-            return {}
+            import json
+            map_data = json.loads(result.stdout)
+            
+            # Check each config value
+            expected = {
+                CFG_SYN_RATE: config.get('protection.syn_rate', 1000),
+                CFG_UDP_RATE: config.get('protection.udp_rate', 500),
+                CFG_ICMP_RATE: config.get('protection.icmp_rate', 100),
+                CFG_ENABLED: 1 if config.get('protection.enabled', True) else 0
+            }
+            
+            for entry in map_data:
+                key = entry.get('key')
+                value = entry.get('value')
+                
+                if isinstance(key, list) and len(key) == 4:
+                    # Convert key from byte array
+                    key_int = struct.unpack('I', bytes(key))[0]
+                    
+                    if key_int in expected:
+                        if isinstance(value, list) and len(value) == 8:
+                            # Convert value from byte array (64-bit)
+                            value_int = struct.unpack('<Q', bytes(value))[0]
+                            
+                            if value_int != expected[key_int]:
+                                logger.warning(f"Config mismatch: key={key_int}, expected={expected[key_int]}, got={value_int}")
+                                return False
+            
+            logger.info("✓ Config verification passed")
+            return True
             
         except Exception as e:
-            logger.error(f"Failed to read config from XDP: {e}")
-            return {}
+            logger.error(f"Config verification failed: {e}")
+            return False
     
-    def verify_sync(self, config):
+    def clear_whitelist(self):
         """
-        Verify that config is properly synced with XDP.
+        Clear all entries from whitelist map
         """
-        xdp_config = self.get_current_config_from_xdp()
-        
-        if not xdp_config:
-            logger.warning("Не удалось прочитать конфиг из XDP")
+        try:
+            # Get all keys from whitelist
+            result = subprocess.run(
+                ['sudo', 'bpftool', 'map', 'dump', 'name', 'whitelist', '-j'],
+                capture_output=True, text=True, timeout=5
+            )
+            
+            if result.returncode != 0:
+                return False
+            
+            import json
+            map_data = json.loads(result.stdout)
+            
+            for entry in map_data:
+                key = entry.get('key')
+                if isinstance(key, list) and len(key) == 4:
+                    key_hex = [f'{b:02x}' for b in key]
+                    cmd = ['sudo', 'bpftool', 'map', 'delete', 'name', 'whitelist',
+                           'key', 'hex'] + key_hex
+                    subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+            
+            logger.info("Whitelist cleared")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to clear whitelist: {e}")
             return False
-        
-        # Compare values
-        expected = {
-            'syn_rate': config.get('protection.syn_rate', 1000),
-            'udp_rate': config.get('protection.udp_rate', 500),
-            'icmp_rate': config.get('protection.icmp_rate', 100),
-            'enabled': config.get('protection.enabled', True)
-        }
-        
-        mismatches = []
-        for key, expected_val in expected.items():
-            actual_val = xdp_config.get(key)
-            if actual_val != expected_val:
-                mismatches.append(f"{key}: expected {expected_val}, got {actual_val}")
-        
-        if mismatches:
-            logger.warning(f"Несоответствия конфига: {', '.join(mismatches)}")
-            return False
-        
-        logger.info("✓ Конфигурация XDP соответствует config.yaml")
-        return True
