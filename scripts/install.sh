@@ -1,216 +1,222 @@
 #!/bin/bash
-
+#
 # XDPGuard Installation Script
-# Installs XDP/eBPF DDoS protection system
-# Compatible with Ubuntu 20.04+, Debian 11+, CentOS 8+, RHEL 8+
+#
+# Automatically installs and configures XDPGuard with:
+# - Dependency installation
+# - XDP program compilation
+# - Configuration setup
+# - Systemd service installation
+#
+# Usage:
+#   sudo ./scripts/install.sh         # Fresh install
+#   sudo ./scripts/install.sh update  # Update existing installation
+#
 
-set -e
+set -e  # Exit on error
 
-echo ""
-echo "======================================"
-echo "   XDPGuard Installation Script"
-echo "======================================"
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0;m' # No Color
+
+echo -e "${GREEN}=====================================${NC}"
+echo -e "${GREEN}  XDPGuard Installation Script${NC}"
+echo -e "${GREEN}=====================================${NC}"
 echo ""
 
 # Check if running as root
-if [ "$EUID" -ne 0 ]; then
-    echo "ERROR: Please run as root (use sudo)"
+if [ "$EUID" -ne 0 ]; then 
+    echo -e "${RED}ERROR: Please run as root (use sudo)${NC}"
     exit 1
 fi
 
-# Detect OS
-if [ -f /etc/os-release ]; then
-    . /etc/os-release
-    OS=$ID
-    OS_VERSION=$VERSION_ID
+# Detect installation mode
+MODE="${1:-install}"
+if [ "$MODE" = "update" ]; then
+    echo -e "${YELLOW}Mode: UPDATE (preserving config)${NC}"
+    UPDATE_MODE=true
 else
-    echo "ERROR: Cannot detect operating system"
-    exit 1
+    echo -e "${YELLOW}Mode: FRESH INSTALL${NC}"
+    UPDATE_MODE=false
 fi
 
-echo "[1/8] Detected OS: $OS $OS_VERSION"
 echo ""
 
-# Install dependencies
-echo "[2/8] Installing system dependencies..."
-if [ "$OS" = "ubuntu" ] || [ "$OS" = "debian" ]; then
-    apt-get update
-    
-    # Core dependencies (without python3-bcc which may not exist)
-    apt-get install -y \
-        python3 \
-        python3-pip \
-        clang \
-        llvm \
-        libelf-dev \
-        libbpf-dev \
-        make \
-        git \
-        curl \
-        iproute2 || true
-    
-    # Try to install linux headers
-    apt-get install -y linux-headers-$(uname -r) || \
-    apt-get install -y linux-headers-amd64 || \
-    apt-get install -y linux-headers-generic || \
-    echo "WARNING: Could not install kernel headers, compilation may fail"
-    
-elif [ "$OS" = "centos" ] || [ "$OS" = "rhel" ] || [ "$OS" = "fedora" ]; then
-    yum install -y \
-        python3 \
-        python3-pip \
-        clang \
-        llvm \
-        elfutils-libelf-devel \
-        kernel-devel \
-        libbpf-devel \
-        make \
-        git \
-        curl \
-        iproute || true
+# Step 1: Install dependencies
+echo -e "${GREEN}[1/8] Installing dependencies...${NC}"
+apt-get update -qq
+apt-get install -y -qq \
+    clang \
+    llvm \
+    libbpf-dev \
+    linux-headers-$(uname -r) \
+    build-essential \
+    python3 \
+    python3-pip \
+    python3-yaml \
+    python3-flask \
+    iproute2 \
+    bpftool \
+    git \
+    curl > /dev/null 2>&1
+
+echo -e "${GREEN}✓ Dependencies installed${NC}"
+
+# Step 2: Detect network interface
+echo -e "${GREEN}[2/8] Detecting network interface...${NC}"
+INTERFACE=$(ip route | grep default | awk '{print $5}' | head -n1)
+if [ -z "$INTERFACE" ]; then
+    INTERFACE="eth0"  # Fallback
+    echo -e "${YELLOW}⚠ Could not detect interface, using $INTERFACE${NC}"
 else
-    echo "ERROR: Unsupported OS: $OS"
-    echo "Supported: Ubuntu, Debian, CentOS, RHEL, Fedora"
+    echo -e "${GREEN}✓ Detected interface: $INTERFACE${NC}"
+fi
+
+# Step 3: Compile XDP program
+echo -e "${GREEN}[3/8] Compiling XDP program...${NC}"
+
+if [ ! -f "bpf/xdp_filter.c" ]; then
+    echo -e "${RED}ERROR: bpf/xdp_filter.c not found. Are you in the xdpguard directory?${NC}"
     exit 1
 fi
 
-echo "✓ System dependencies installed"
-echo ""
+mkdir -p build
 
-# Install Python dependencies
-echo "[3/8] Installing Python dependencies..."
+clang -O2 -g -target bpf \
+    -D__BPF_TRACING__ \
+    -I/usr/include/$(uname -m)-linux-gnu \
+    -c bpf/xdp_filter.c \
+    -o build/xdp_filter.o
 
-# Try system packages first
-if [ "$OS" = "ubuntu" ] || [ "$OS" = "debian" ]; then
-    apt-get install -y \
-        python3-flask \
-        python3-yaml \
-        python3-click \
-        python3-requests \
-        python3-psutil 2>/dev/null || true
-fi
-
-# Install via pip if needed (with fallback for newer Ubuntu)
-pip3 install Flask PyYAML click requests psutil --break-system-packages 2>/dev/null || \
-pip3 install Flask PyYAML click requests psutil || \
-echo "WARNING: Some Python packages may not be installed"
-
-echo "✓ Python packages installed"
-echo ""
-
-# Compile XDP programs
-echo "[4/8] Compiling XDP/eBPF programs..."
-cd bpf
-
-# Check dependencies
-if ! which clang > /dev/null 2>&1; then
-    echo "ERROR: clang not found. Install clang first."
+if [ ! -f "build/xdp_filter.o" ]; then
+    echo -e "${RED}ERROR: XDP compilation failed${NC}"
     exit 1
 fi
 
-echo "Cleaning previous builds..."
-make clean 2>/dev/null || true
+echo -e "${GREEN}✓ XDP program compiled successfully${NC}"
 
-echo "Compiling XDP program..."
-if make; then
-    echo "✓ XDP program compiled successfully"
-else
-    echo "ERROR: XDP compilation failed"
-    echo "Check that kernel headers are installed: apt install linux-headers-\$(uname -r)"
-    exit 1
-fi
-
-echo "Installing XDP program..."
-if make install; then
-    echo "✓ XDP program installed"
-else
-    echo "ERROR: XDP installation failed"
-    exit 1
-fi
-
-cd ..
-echo ""
-
-# Verify XDP compilation
-echo "[5/8] Verifying XDP program..."
-if [ ! -f "/usr/lib/xdpguard/xdp_filter.o" ]; then
-    echo "ERROR: XDP program not found at /usr/lib/xdpguard/xdp_filter.o"
-    exit 1
-fi
-
-XDP_SIZE=$(stat -c%s /usr/lib/xdpguard/xdp_filter.o)
-echo "✓ XDP program verified (size: $XDP_SIZE bytes)"
-echo ""
+# Step 4: Install files
+echo -e "${GREEN}[4/8] Installing files...${NC}"
 
 # Create directories
-echo "[6/8] Creating system directories..."
-mkdir -p /etc/xdpguard
-mkdir -p /var/lib/xdpguard
-mkdir -p /var/log
 mkdir -p /opt/xdpguard
-echo "✓ Directories created"
-echo ""
+mkdir -p /usr/lib/xdpguard
+mkdir -p /etc/xdpguard
+mkdir -p /var/log
 
-# Install files
-echo "[7/8] Installing XDPGuard files..."
-
-# Copy config if not exists
-if [ ! -f "/etc/xdpguard/config.yaml" ]; then
-    cp config.yaml /etc/xdpguard/
-    echo "✓ Configuration file installed"
-else
-    echo "! Configuration file already exists, skipping"
-fi
-
-# Copy Python modules
+# Copy Python files
 cp -r python /opt/xdpguard/
 cp -r web /opt/xdpguard/
 cp daemon.py /opt/xdpguard/
 cp cli.py /opt/xdpguard/
+
+# Copy compiled XDP program
+cp build/xdp_filter.o /usr/lib/xdpguard/
+
+echo -e "${GREEN}✓ Files installed to /opt/xdpguard${NC}"
+
+# Step 5: Configure
+echo -e "${GREEN}[5/8] Configuring...${NC}"
+
+if [ "$UPDATE_MODE" = true ] && [ -f "/etc/xdpguard/config.yaml" ]; then
+    echo -e "${YELLOW}⚠ Config exists, preserving /etc/xdpguard/config.yaml${NC}"
+    # Still update interface if it changed
+    sed -i "s/interface:.*/interface: $INTERFACE/" /etc/xdpguard/config.yaml
+else
+    # Fresh install - copy config and customize
+    if [ -f "config/config.yaml" ]; then
+        cp config/config.yaml /etc/xdpguard/config.yaml
+    else
+        echo -e "${RED}ERROR: config/config.yaml not found${NC}"
+        exit 1
+    fi
+    
+    # Set detected interface
+    sed -i "s/interface:.*/interface: $INTERFACE/" /etc/xdpguard/config.yaml
+    
+    echo -e "${GREEN}✓ Config installed to /etc/xdpguard/config.yaml${NC}"
+fi
+
+# Step 6: Install systemd service
+echo -e "${GREEN}[6/8] Installing systemd service...${NC}"
+
+cat > /etc/systemd/system/xdpguard.service << 'EOF'
+[Unit]
+Description=XDPGuard DDoS Protection System
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/xdpguard
+ExecStart=/usr/bin/python3 /opt/xdpguard/daemon.py
+Restart=on-failure
+RestartSec=10s
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+
+# Security
+NoNewPrivileges=false
+PrivateTmp=true
+
+# Resource limits
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+systemctl daemon-reload
+echo -e "${GREEN}✓ Systemd service installed${NC}"
+
+# Step 7: Set permissions
+echo -e "${GREEN}[7/8] Setting permissions...${NC}"
+chown -R root:root /opt/xdpguard
 chmod +x /opt/xdpguard/daemon.py
 chmod +x /opt/xdpguard/cli.py
+chmod 644 /etc/xdpguard/config.yaml
+echo -e "${GREEN}✓ Permissions set${NC}"
 
-# Install systemd service
-cp systemd/xdpguard.service /etc/systemd/system/
-echo "✓ Files installed"
-echo ""
+# Step 8: Enable and start service
+echo -e "${GREEN}[8/8] Starting service...${NC}"
 
-# Setup systemd service
-echo "[8/8] Setting up systemd service..."
-systemctl daemon-reload
-systemctl enable xdpguard
-echo "✓ Service enabled"
-echo ""
+if [ "$UPDATE_MODE" = true ]; then
+    echo -e "${YELLOW}Restarting xdpguard service...${NC}"
+    systemctl restart xdpguard
+else
+    systemctl enable xdpguard
+    systemctl start xdpguard
+fi
 
-echo "======================================"
-echo "   Installation Complete!"
-echo "======================================"
+# Wait a moment for service to start
+sleep 2
+
+# Check service status
+if systemctl is-active --quiet xdpguard; then
+    echo -e "${GREEN}✓ XDPGuard service is running${NC}"
+else
+    echo -e "${RED}⚠ Service started but may have issues. Check: journalctl -u xdpguard -n 50${NC}"
+fi
+
 echo ""
-echo "IMPORTANT: Configure before starting!"
+echo -e "${GREEN}=====================================${NC}"
+echo -e "${GREEN}  Installation Complete!${NC}"
+echo -e "${GREEN}=====================================${NC}"
 echo ""
-echo "1. Edit configuration:"
-echo "   nano /etc/xdpguard/config.yaml"
+echo -e "${YELLOW}Quick Start:${NC}"
+echo -e "  - Web UI: http://$(hostname -I | awk '{print $1}'):8080"
+echo -e "  - Status: systemctl status xdpguard"
+echo -e "  - Logs: journalctl -u xdpguard -f"
+echo -e "  - Config: /etc/xdpguard/config.yaml"
 echo ""
-echo "2. Set your network interface:"
-echo "   Find your interface: ip link show"
-echo "   Edit config and change 'interface' value"
+echo -e "${YELLOW}Important:${NC}"
+echo -e "  1. Configure rate limits in /etc/xdpguard/config.yaml"
+echo -e "  2. Add your management IPs to whitelist_ips"
+echo -e "  3. Restart service: systemctl restart xdpguard"
 echo ""
-echo "3. Start the service:"
-echo "   systemctl start xdpguard"
-echo ""
-echo "4. Check status:"
-echo "   systemctl status xdpguard"
-echo ""
-echo "5. View logs:"
-echo "   journalctl -u xdpguard -f"
-echo ""
-echo "6. Open web panel:"
-echo "   http://your-server-ip:8080"
-echo ""
-echo "7. Check XDP is loaded:"
-echo "   ip link show <your-interface>"
-echo "   bpftool prog show"
-echo ""
-echo "======================================"
-echo "For help: https://github.com/chirkovap/xdpguard"
-echo "======================================"
+echo -e "${GREEN}Happy protecting! 🛡️${NC}"
