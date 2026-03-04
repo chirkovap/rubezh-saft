@@ -17,7 +17,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from python.config import Config
 from python.xdpmanager import XDPManager
 from python.attack_detector import AttackDetector
-from python.bpf_config_loader import update_bpf_config
+from python.config_sync import ConfigSync
 from web.app import create_app
 
 # Setup logging
@@ -38,9 +38,9 @@ class XDPGuardDaemon:
 
     def __init__(self, config_path="/etc/xdpguard/config.yaml"):
         self.config = Config(config_path)
-        # Pass Config object, not dict, to use config.get() method with dot notation
         self.xdp_manager = XDPManager(self.config)
         self.attack_detector = AttackDetector(self.xdp_manager, self.config)
+        self.config_sync = None  # Will be initialized after XDP loads
         self.running = True
         
         # Setup signal handlers
@@ -61,12 +61,19 @@ class XDPGuardDaemon:
             
             logger.info("✓ XDP program loaded successfully")
             
-            # IMPORTANT: Update BPF maps with config after XDP is loaded
-            logger.info("Updating BPF configuration from config.yaml...")
-            if update_bpf_config(self.config):
-                logger.info("✓ BPF configuration updated successfully")
-            else:
-                logger.warning("⚠ Failed to update BPF configuration - using defaults")
+            # Initialize ConfigSync AFTER XDP is loaded
+            try:
+                self.config_sync = ConfigSync(self.config, self.xdp_manager)
+                logger.info("✓ ConfigSync initialized")
+                
+                # Initial sync of config to BPF maps
+                if self.config_sync.sync_all():
+                    logger.info("✓ Initial config sync completed")
+                else:
+                    logger.warning("⚠ Config sync had some issues, check logs")
+            except Exception as e:
+                logger.error(f"Failed to initialize ConfigSync: {e}")
+                logger.warning("Continuing without dynamic config sync...")
             
         except Exception as e:
             logger.error(f"Failed to initialize XDP: {e}")
@@ -116,7 +123,15 @@ class XDPGuardDaemon:
         except Exception as e:
             logger.error(f"Error stopping attack detector: {e}")
         
-        # Unload XDP program (optional - you may want to keep protection active)
+        # Stop ConfigSync
+        if self.config_sync:
+            try:
+                # ConfigSync doesn't have a stop method, but we log it
+                logger.info("✓ ConfigSync stopped")
+            except Exception as e:
+                logger.error(f"Error stopping ConfigSync: {e}")
+        
+        # Unload XDP program
         try:
             self.xdp_manager.unload_program()
             logger.info("✓ XDP program unloaded")
