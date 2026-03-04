@@ -56,7 +56,7 @@ def create_app(config, xdp_manager):
 
     @app.route('/api/block', methods=['POST'])
     def api_block():
-        """Block an IP address"""
+        """Блокировка IP адреса"""
         try:
             data = request.json
             ip = data.get('ip')
@@ -76,7 +76,7 @@ def create_app(config, xdp_manager):
 
     @app.route('/api/unblock', methods=['POST'])
     def api_unblock():
-        """Unblock an IP address"""
+        """Разблокировка IP адреса"""
         try:
             data = request.json
             ip = data.get('ip')
@@ -96,7 +96,7 @@ def create_app(config, xdp_manager):
 
     @app.route('/api/blocked')
     def api_blocked():
-        """Get list of blocked IPs"""
+        """Получить список заблокированных IP"""
         try:
             blocked_ips = xdp_manager.get_blocked_ips()
             
@@ -110,7 +110,7 @@ def create_app(config, xdp_manager):
 
     @app.route('/api/clear-rate-limits', methods=['POST'])
     def api_clear_rate_limits():
-        """Clear rate limiting counters"""
+        """Очистить счётчики rate limiting"""
         try:
             success = xdp_manager.clear_rate_limits()
             
@@ -144,7 +144,7 @@ def create_app(config, xdp_manager):
 
     @app.route('/api/events/raw')
     def api_events_raw():
-        """Получить события в сыром формате (как они хранятся)"""
+        """Получить события в сыром формате"""
         try:
             limit = int(request.args.get('limit', 100))
             events = xdp_manager.get_events_raw(limit)
@@ -181,11 +181,88 @@ def create_app(config, xdp_manager):
             logger.error(f"Failed to clear events: {e}")
             return jsonify({'success': False, 'error': str(e)}), 500
     
-    # ========== END EVENT ENDPOINTS ==========
+    # ========== PACKET LOGGING ENDPOINTS ==========
+    
+    @app.route('/api/packet-logs')
+    def api_packet_logs():
+        """Получить логи пакетов"""
+        try:
+            # Параметры
+            limit = min(int(request.args.get('limit', 100)), 1000)
+            action = request.args.get('action', None)  # 'PASS' or 'DROP'
+            protocol = request.args.get('protocol', None)  # 'TCP', 'UDP', 'ICMP'
+            reason = request.args.get('reason', None)  # 'normal', 'blacklist', 'rate_limit'
+            src_ip = request.args.get('src_ip', None)
+            dst_ip = request.args.get('dst_ip', None)
+            
+            # Собрать фильтры
+            filters = {}
+            if action:
+                filters['action'] = action.upper()
+            if protocol:
+                filters['protocol'] = protocol.upper()
+            if reason:
+                filters['reason'] = reason.lower()
+            if src_ip:
+                filters['src_ip'] = src_ip
+            if dst_ip:
+                filters['dst_ip'] = dst_ip
+            
+            # Получить логи
+            from python.packet_logger import get_packet_logger
+            packet_logger = get_packet_logger()
+            
+            logs = packet_logger.get_logs(limit=limit, filters=filters if filters else None)
+            
+            return jsonify({
+                'success': True,
+                'logs': logs,
+                'count': len(logs),
+                'filters': filters
+            })
+        except Exception as e:
+            logger.error(f"Failed to get packet logs: {e}")
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/packet-logs/stats')
+    def api_packet_log_stats():
+        """Статистика логов пакетов"""
+        try:
+            from python.packet_logger import get_packet_logger
+            packet_logger = get_packet_logger()
+            
+            stats = packet_logger.get_stats()
+            
+            return jsonify({
+                'success': True,
+                'stats': stats
+            })
+        except Exception as e:
+            logger.error(f"Failed to get packet log stats: {e}")
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/packet-logs/clear', methods=['POST'])
+    def api_clear_packet_logs():
+        """Очистить логи пакетов"""
+        try:
+            from python.packet_logger import get_packet_logger
+            packet_logger = get_packet_logger()
+            
+            packet_logger.clear()
+            
+            return jsonify({
+                'success': True,
+                'message': 'Логи пакетов очищены'
+            })
+        except Exception as e:
+            logger.error(f"Failed to clear packet logs: {e}")
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    # ========== END PACKET LOGGING ENDPOINTS ==========
 
     @app.route('/api/config', methods=['GET', 'POST'])
     def api_config():
-        """Get or update configuration"""
+        """Получить или обновить конфигурацию"""
         if request.method == 'GET':
             return jsonify(config.config)
         elif request.method == 'POST':
