@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-XDPGuard Daemon
+XDPGuard — Основной демон
 
-Main service that manages XDP protection and web interface.
+Главный сервис, управляющий XDP-защитой и веб-интерфейсом.
 """
 
 import sys
@@ -11,7 +11,7 @@ import signal
 import time
 from pathlib import Path
 
-# Add project root to path
+# Добавить корень проекта в путь
 sys.path.insert(0, str(Path(__file__).parent))
 
 from python.config import Config
@@ -19,7 +19,7 @@ from python.xdpmanager import XDPManager
 from python.attack_detector import AttackDetector
 from web.app import create_app
 
-# Setup logging
+# Настройка логирования
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -28,62 +28,57 @@ logging.basicConfig(
         logging.StreamHandler()
     ]
 )
-
 logger = logging.getLogger(__name__)
 
 
 class XDPGuardDaemon:
-    """Main daemon for XDPGuard service"""
+    """Основной демон XDPGuard"""
 
     def __init__(self, config_path="/etc/xdpguard/config.yaml"):
         self.config = Config(config_path)
-        # XDPManager already creates ConfigSync internally
+        # XDPManager создаёт ConfigSync внутри себя
         self.xdp_manager = XDPManager(self.config)
         self.attack_detector = AttackDetector(self.xdp_manager, self.config)
         self.running = True
-        
-        # Setup signal handlers
+
+        # Установить обработчики сигналов
         signal.signal(signal.SIGTERM, self.shutdown)
         signal.signal(signal.SIGINT, self.shutdown)
 
     def start(self):
-        """Start the daemon"""
-        logger.info("="*60)
-        logger.info("Starting XDPGuard Daemon...")
-        logger.info("="*60)
-        
-        # Load XDP program
+        """Запустить демон"""
+        logger.info("=" * 60)
+        logger.info("Запуск XDPGuard...")
+        logger.info("=" * 60)
+
+        # Загрузить XDP-программу
         try:
             if not self.xdp_manager.load_program():
-                logger.error("Failed to load XDP program")
+                logger.error("Не удалось загрузить XDP-программу")
                 sys.exit(1)
-            
-            logger.info("✓ XDP program loaded successfully")
-            # ConfigSync already ran in XDPManager.load_program()
-            logger.info("✓ ConfigSync completed (handled by XDPManager)")
-            
+            logger.info("✓ XDP-программа успешно загружена")
+            logger.info("✓ ConfigSync завершена (обработана XDPManager)")
         except Exception as e:
-            logger.error(f"Failed to initialize XDP: {e}")
+            logger.error(f"Ошибка инициализации XDP: {e}")
             sys.exit(1)
-        
-        # Start attack detector
+
+        # Запустить детектор атак
         try:
             self.attack_detector.start()
-            logger.info("✓ Attack detector started")
+            logger.info("✓ Детектор атак запущен")
         except Exception as e:
-            logger.error(f"Failed to start attack detector: {e}")
-        
-        # Start web interface
+            logger.error(f"Не удалось запустить детектор атак: {e}")
+
+        # Запустить веб-интерфейс
         web_host = self.config.get('web.host', '0.0.0.0')
         web_port = self.config.get('web.port', 8080)
-        
         app = create_app(self.config, self.xdp_manager)
-        
-        logger.info(f"✓ Web interface starting on http://{web_host}:{web_port}")
-        logger.info("="*60)
-        logger.info("XDPGuard is running. Press Ctrl+C to stop.")
-        logger.info("="*60)
-        
+
+        logger.info(f"✓ Веб-интерфейс запускается на http://{web_host}:{web_port}")
+        logger.info("=" * 60)
+        logger.info("XDPGuard работает. Для остановки нажмите Ctrl+C.")
+        logger.info("=" * 60)
+
         try:
             app.run(
                 host=web_host,
@@ -92,37 +87,37 @@ class XDPGuardDaemon:
                 use_reloader=False
             )
         except Exception as e:
-            logger.error(f"Web interface error: {e}")
+            logger.error(f"Ошибка веб-интерфейса: {e}")
             self.shutdown(None, None)
 
     def shutdown(self, signum, frame):
-        """Graceful shutdown"""
-        logger.info("\n" + "="*60)
-        logger.info("Shutting down XDPGuard...")
-        logger.info("="*60)
-        
+        """Корректное завершение работы"""
+        logger.info("\n" + "=" * 60)
+        logger.info("Завершение работы XDPGuard...")
+        logger.info("=" * 60)
+
         self.running = False
-        
-        # Stop attack detector
+
+        # Остановить детектор атак
         try:
             self.attack_detector.stop()
-            logger.info("✓ Attack detector stopped")
+            logger.info("✓ Детектор атак остановлен")
         except Exception as e:
-            logger.error(f"Error stopping attack detector: {e}")
-        
-        # Unload XDP program (ConfigSync cleanup happens in XDPManager)
+            logger.error(f"Ошибка при остановке детектора атак: {e}")
+
+        # Выгрузить XDP-программу (очистка ConfigSync происходит в XDPManager)
         try:
             self.xdp_manager.unload_program()
-            logger.info("✓ XDP program unloaded")
+            logger.info("✓ XDP-программа выгружена")
         except Exception as e:
-            logger.error(f"Error unloading XDP: {e}")
-        
-        logger.info("✓ XDPGuard stopped")
+            logger.error(f"Ошибка при выгрузке XDP: {e}")
+
+        logger.info("✓ XDPGuard остановлен")
         sys.exit(0)
 
 
 def main():
-    """Main entry point"""
+    """Точка входа"""
     daemon = XDPGuardDaemon()
     daemon.start()
 

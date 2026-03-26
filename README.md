@@ -1,345 +1,229 @@
 # XDPGuard
 
-**High-performance DDoS protection system using XDP/eBPF** 🛡️
+**Высокопроизводительная система защиты от DDoS на основе XDP/eBPF** 🛡️
 
-XDPGuard provides kernel-level packet filtering with **dynamic configuration** - change rate limits without recompiling!
+XDPGuard обеспечивает фильтрацию пакетов на уровне ядра с **динамической конфигурацией** — изменяйте лимиты трафика без перекомпиляции!
 
-## ✨ Features
+## ✨ Возможности
 
-- 🚀 **Ultra-fast**: XDP processes packets at NIC driver level
-- ⚙️ **Dynamic Config**: Change rate limits in real-time via `config.yaml`
-- 🎯 **Protocol-specific**: Separate limits for TCP SYN, UDP, ICMP
-- 🔒 **Whitelist/Blacklist**: IP-based access control
-- 📊 **Real-time Stats**: Live packet statistics and monitoring
-- 🌎 **Web UI**: Beautiful dashboard with dark theme (RU/EN)
-- 📦 **Packet Logging**: Detailed capture logs (like ELK/Splunk)
-- 🔔 **Event System**: SIEM-style attack detection and logging
+- 🚀 **Молниеносная скорость**: XDP обрабатывает пакеты на уровне драйвера сетевой карты
+- ⚙️ **Динамическая конфигурация**: Изменяйте лимиты в реальном времени через `config.yaml`
+- 🎯 **Протокол-специфичная защита**: Раздельные лимиты для TCP SYN, UDP, ICMP
+- 🔒 **Белый/чёрный список**: Управление доступом на основе IP-адресов
+- 📊 **Статистика в реальном времени**: Живой мониторинг и статистика пакетов
+- 🌎 **Веб-интерфейс**: Красивый дашборд с тёмной темой (RU/EN)
+- 📦 **Логирование пакетов**: Детальные журналы захвата (аналог ELK/Splunk)
+- 🔔 **Система событий**: Обнаружение атак и логирование в стиле SIEM
 
-## 📦 Quick Start
+## 📦 Быстрый старт
 
-### Installation (Automatic)
+### Установка (автоматическая)
 
 ```bash
-# Clone repository
+# Клонировать репозиторий
 git clone https://github.com/chirkovap/xdpguard.git
 cd xdpguard
 
-# Run automated install (compiles XDP, installs everything)
+# Запустить автоматическую установку (компилирует XDP, устанавливает всё необходимое)
 sudo ./scripts/install.sh
 
-# Access web UI
+# Открыть веб-интерфейс
 firefox http://$(hostname -I | awk '{print $1}'):8080
 ```
 
-**That's it!** 🎉 XDPGuard is now protecting your system.
+**Готово!** 🎉 XDPGuard теперь защищает вашу систему.
 
-### Update Existing Installation
+### Обновление существующей установки
 
 ```bash
 cd xdpguard
 git pull origin main
 
-# Update without losing config
+# Обновить без потери конфигурации
 sudo ./scripts/install.sh update
 ```
 
-## ⚙️ Configuration
+## ⚙️ Конфигурация
 
-### How It Works
+### Как это работает
 
-🔑 **Key Innovation**: XDPGuard uses BPF maps for configuration storage. When you edit `/etc/xdpguard/config.yaml` and restart, Python automatically syncs values to XDP kernel maps - **no recompilation needed**!
+🔑 **Ключевая особенность**: XDPGuard использует BPF maps для хранения конфигурации. При редактировании `/etc/xdpguard/config.yaml` и перезапуске Python автоматически синхронизирует значения с картами ядра XDP — **перекомпиляция не нужна**!
 
-### Configure Rate Limits
+### Настройка лимитов трафика
 
-Edit `/etc/xdpguard/config.yaml`:
+Отредактируйте `/etc/xdpguard/config.yaml`:
 
 ```yaml
 protection:
   enabled: true
   
-  # Packets per second per IP
-  syn_rate: 1000      # TCP SYN packets
-  udp_rate: 500       # UDP packets  
-  icmp_rate: 100      # ICMP packets
+  # Пакетов в секунду на один IP
+  syn_rate: 1000      # TCP SYN пакеты
+  udp_rate: 500       # UDP пакеты  
+  icmp_rate: 100      # ICMP пакеты
   
-  # Burst allowance
+  # Допустимый всплеск
   syn_burst: 2000
   udp_burst: 1000
   icmp_burst: 200
 ```
 
-**Apply changes:**
+**Применить изменения:**
 
 ```bash
 sudo systemctl restart xdpguard
 
-# Verify sync
+# Проверить синхронизацию
 sudo journalctl -u xdpguard -n 20 | grep -i "config"
-# Should show: ✓ Rate limits synced to XDP successfully
 ```
 
-### Whitelist Management
+### Управление белым списком
 
-**IMPORTANT**: Add your management IPs to avoid lockout!
+**ВАЖНО**: Добавьте свои управляющие IP-адреса, чтобы не потерять доступ!
 
 ```yaml
 whitelist_ips:
-  - 127.0.0.1           # Localhost
-  - 192.168.0.0/16      # Local network
-  - 10.0.0.0/8          # VPN network
-  - YOUR.IP.HERE        # <-- Add your IP!
+  - 127.0.0.1           # Локальный хост
+  - 192.168.0.0/16      # Локальная сеть
+  - 10.0.0.0/8          # VPN сеть
+  - YOUR.IP.HERE        # <-- Добавьте ваш IP!
 ```
 
-Whitelist is automatically synced to XDP on restart.
-
-### Network Interface
-
-Auto-detected during install, but verify:
+### Сетевой интерфейс
 
 ```yaml
 network:
-  interface: ens33    # Change if needed
+  interface: ens33    # Измените при необходимости
   xdp_mode: xdpgeneric
 ```
 
-Find your interface: `ip link show`
+Найти свой интерфейс: `ip link show`
 
-## 🔧 Management
+## 🔧 Управление
 
-### Service Control
+### Управление сервисом
 
 ```bash
-# Status
 sudo systemctl status xdpguard
-
-# Start/Stop
 sudo systemctl start xdpguard
 sudo systemctl stop xdpguard
-
-# Restart (applies config changes)
 sudo systemctl restart xdpguard
-
-# Logs
 sudo journalctl -u xdpguard -f
 ```
 
-### CLI Commands
+### Команды CLI
 
 ```bash
 cd /opt/xdpguard
-
-# Get statistics
 sudo python3 cli.py stats
-
-# Block IP
 sudo python3 cli.py block 1.2.3.4
-
-# Unblock IP
 sudo python3 cli.py unblock 1.2.3.4
-
-# List blocked IPs
 sudo python3 cli.py list
 ```
 
-### Web API
+### Веб API
 
 ```bash
-# Get status
 curl http://localhost:8080/api/status
-
-# Get events
 curl http://localhost:8080/api/events?limit=20
-
-# Get packet logs
 curl http://localhost:8080/api/packets?limit=100
-
-# Block IP
 curl -X POST http://localhost:8080/api/block \
   -H "Content-Type: application/json" \
   -d '{"ip": "1.2.3.4", "reason": "malicious"}'
 ```
 
-## 📊 Web Dashboard
+## 📊 Веб-дашборд
 
-### Features
+- **Дашборд**: Статистика в реальном времени, пропускная способность, процент блокировок
+- **Журнал событий**: Обнаружение атак, блокировки, системные события
+- **Журнал пакетов**: Детальный захват пакетов с фильтрацией
+- **Темы**: Переключение светлой/тёмной темы
+- **Языки**: Русский/Английский
 
-- **Dashboard**: Real-time statistics, throughput, drop rate
-- **Events Log**: Attack detection, blocks, system events
-- **Packet Log**: Detailed packet capture with filtering
-- **Themes**: Light/Dark mode toggle
-- **Languages**: English/Russian
+Доступно по адресу: `http://<ip-вашего-сервера>:8080`
 
-### Screenshots
+## 🛠️ Архитектура
 
-Access at: `http://<your-server-ip>:8080`
+**Ключевые компоненты:**
 
-- 📊 Drop rate indicator
-- 🟢 Packets passed/dropped
-- 🚫 Blocked IPs list
-- ⚡ Quick actions (block, unblock, reload)
+1. **XDP фильтр** (`bpf/xdp_filter.c`): C-программа, работающая в ядре
+2. **ConfigSync** (`python/config_sync.py`): Синхронизирует YAML с BPF maps
+3. **XDPManager** (`python/xdpmanager.py`): Управляет жизненным циклом XDP
+4. **Веб-дашборд** (`web/app.py`): Интерфейс на основе Flask
 
-## 🛠️ Architecture
+## 🐛 Устранение неисправностей
 
-```
-┌───────────────────┐
-│  Network Packets  │
-└───────┬───────────┘
-        │
-        │ NIC Driver
-        │
-        │
-   ┌────┴─────────────┐
-   │  XDP/eBPF Filter  │  <-- Kernel space (C)
-   │  - Whitelist      │
-   │  - Blacklist      │
-   │  - Rate Limits    │
-   │  - Stats          │
-   └─────┬────────────┘
-        │
-        │ BPF Maps (shared memory)
-        │
-   ┌────┴─────────────┐
-   │  Python Manager   │  <-- Userspace
-   │  - ConfigSync     │
-   │  - EventLogger    │
-   │  - PacketCapture  │
-   │  - Web UI         │
-   └──────────────────┘
-```
-
-**Key Components:**
-
-1. **XDP Filter** (`bpf/xdp_filter.c`): C program running in kernel
-2. **ConfigSync** (`python/config_sync.py`): Syncs YAML to BPF maps
-3. **XDPManager** (`python/xdpmanager.py`): Manages XDP lifecycle
-4. **Web Dashboard** (`web/app.py`): Flask-based UI
-
-## 🐛 Troubleshooting
-
-### SSH/Web UI Becomes Unreachable
-
-**Cause**: Rate limits too aggressive, blocking legitimate traffic.
-
-**Fix**:
+### SSH/Веб-интерфейс недоступен
 
 ```bash
-# Emergency: Disable XDP from console
 sudo ip link set dev ens33 xdp off
-
-# Edit config
 sudo nano /etc/xdpguard/config.yaml
-# Increase: syn_rate: 1000, udp_rate: 500
-
-# Add your IP to whitelist
-# whitelist_ips:
-#   - YOUR.IP.HERE
-
-# Restart
 sudo systemctl restart xdpguard
 ```
 
-### Config Changes Not Applied
-
-**Verify sync**:
+### Изменения конфигурации не применяются
 
 ```bash
 sudo journalctl -u xdpguard -n 30 | grep -i sync
 ```
 
-Should show:
-```
-✓ Rate limits synced to XDP successfully
-✓ Config verification passed
-```
-
-If not:
-```bash
-# Reinstall to fix BPF maps
-cd xdpguard
-sudo ./scripts/install.sh update
-```
-
-### PacketCapture Not Working
-
-```bash
-# Check logs
-sudo journalctl -u xdpguard -n 50 | grep -i packet
-
-# Should see:
-# PacketCapture инициализирован
-# ✓ Захват пакетов запущен
-
-# Enable in config if disabled
-# logging:
-#   enable_packet_logging: true
-```
-
-### High Drop Rate (>50%)
-
-**Check**:
+### Высокий процент блокировок (>50%)
 
 ```bash
 curl http://localhost:8080/api/status
+curl http://localhost:8080/api/events
 ```
 
-If `packets_dropped / packets_total > 0.5`:
+## 📚 Частые вопросы
 
-1. **Increase rate limits** in config
-2. **Add legit IPs to whitelist**
-3. **Check for actual attack**: `curl http://localhost:8080/api/events`
+**В: Действительно ли config.yaml работает без перекомпиляции?**  
+О: Да! Начиная с коммита `919041d`, Python динамически синхронизирует конфиг с BPF maps.
 
-## 📚 FAQ
+**В: Почему виртуальная машина тормозит после включения XDPGuard?**  
+О: Используйте режим `xdpgeneric` (по умолчанию). Нативный `xdpdrv` требует поддержки драйвера.
 
-**Q: Does config.yaml really work without recompiling?**  
-A: Yes! Since commit `919041d`, Python syncs config to BPF maps dynamically.
+**В: Можно ли использовать в продакшне?**  
+О: Да, но сначала протестируйте лимиты!
 
-**Q: Why is my VM slow after enabling XDPGuard?**  
-A: Use `xdpgeneric` mode (default). Native `xdpdrv` requires driver support.
+**В: Как добавить целую подсеть в белый список?**  
+О: Используйте CIDR нотацию: `192.168.0.0/24` или `10.0.0.0/8`
 
-**Q: Can I use this in production?**  
-A: Yes, but test rate limits first! Start with high values (1000+) and adjust down.
+**В: Защищает ли от всех DDoS атак?**  
+О: Снижает эффективность объёмных атак (SYN flood, UDP flood, ICMP flood). Атаки на уровне приложения требуют дополнительной защиты.
 
-**Q: How to add entire subnet to whitelist?**  
-A: Use CIDR notation: `192.168.0.0/24` or `10.0.0.0/8`
+## 📝 Системные требования
 
-**Q: Does it protect against all DDoS attacks?**  
-A: It mitigates volumetric attacks (SYN flood, UDP flood, ICMP flood). Application-layer attacks (HTTP flood) need additional protection.
+- **ОС**: Ubuntu 20.04+, Debian 11+ или аналог
+- **Ядро**: 5.4+ с поддержкой XDP
+- **ОЗУ**: минимум 512МБ, рекомендуется 1ГБ
+- **Диск**: 100МБ для установки
+- Требуется **доступ root**
 
-## 📝 System Requirements
+## 👥 Участие в разработке
 
-- **OS**: Ubuntu 20.04+, Debian 11+, or similar
-- **Kernel**: 5.4+ with XDP support
-- **RAM**: 512MB minimum, 1GB recommended
-- **Disk**: 100MB for installation
-- **Root access** required
+1. Сделайте fork репозитория
+2. Создайте ветку: `git checkout -b feature/amazing`
+3. Зафиксируйте изменения: `git commit -m 'Добавить amazing функцию'`
+4. Отправьте: `git push origin feature/amazing`
+5. Откройте Pull Request
 
-## 👥 Contributing
+## 📜 Лицензия
 
-Contributions welcome! Please:
+Лицензия GPL-3.0 — см. файл [LICENSE](LICENSE)
 
-1. Fork the repository
-2. Create feature branch: `git checkout -b feature/amazing`
-3. Commit changes: `git commit -m 'Add amazing feature'`
-4. Push: `git push origin feature/amazing`
-5. Open Pull Request
+## 👏 Благодарности
 
-## 📜 License
+- **eBPF/XDP**: Подсистема BPF ядра Linux
+- **libbpf**: Библиотека BPF
+- **Flask**: Веб-фреймворк
+- **Plotly**: Графики (если включены)
 
-GPL-3.0 License - See [LICENSE](LICENSE) file
+## 📧 Поддержка
 
-## 👏 Credits
-
-- **eBPF/XDP**: Linux kernel BPF subsystem
-- **libbpf**: BPF library
-- **Flask**: Web framework
-- **Plotly**: Charts (if enabled)
-
-## 📧 Support
-
-- **Issues**: [GitHub Issues](https://github.com/chirkovap/xdpguard/issues)
-- **Docs**: This README + code comments
-- **Community**: Check [Discussions](https://github.com/chirkovap/xdpguard/discussions)
+- **Проблемы**: [GitHub Issues](https://github.com/chirkovap/xdpguard/issues)
+- **Документация**: Этот README + комментарии в коде
+- **Сообщество**: [Discussions](https://github.com/chirkovap/xdpguard/discussions)
 
 ---
 
-**Made with ❤️ and eBPF**
+**Сделано с ❤️ и eBPF**
