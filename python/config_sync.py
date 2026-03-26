@@ -23,8 +23,31 @@ CFG_ENABLED   = 3
 class ConfigSync:
     """Синхронизирует YAML-конфигурацию с XDP BPF maps"""
 
-    def __init__(self):
+    def __init__(self) -> None:
         logger.info("ConfigSync инициализирован")
+        self._check_bpftool()
+
+    def _check_bpftool(self) -> None:
+        """Проверить доступность bpftool в PATH. Выбрасывает RuntimeError если не найден."""
+        try:
+            result = subprocess.run(
+                ['bpftool', 'version'],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+        except FileNotFoundError:
+            raise RuntimeError(
+                "bpftool не найден в PATH. Установите пакет bpftool (например: apt install linux-tools-common)"
+            )
+
+        if result.returncode != 0:
+            raise RuntimeError(
+                f"bpftool недоступен (код возврата {result.returncode}): {result.stderr.strip()}"
+            )
+
+        version_line: str = (result.stdout or result.stderr).splitlines()[0] if (result.stdout or result.stderr) else "версия неизвестна"
+        logger.debug(f"bpftool доступен: {version_line}")
 
     def sync_config_to_xdp(self, config):
         """

@@ -7,6 +7,10 @@ Wants=network-online.target
 Type=simple
 User=root
 WorkingDirectory=/opt/xdpguard
+# Remove any stale XDP program left behind by a previous crash or unclean stop.
+# The interface name must match network.interface in /etc/xdpguard/config.yaml.
+# Replace "ens33" below if your interface name differs.
+ExecStartPre=-/sbin/ip link set dev ens33 xdp off
 ExecStart=/usr/bin/python3 /opt/xdpguard/daemon.py
 Restart=on-failure
 RestartSec=10s

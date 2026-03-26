@@ -1,17 +1,28 @@
 #!/usr/bin/env python3
 """
-XDPGuard — Основной демон
+XDPGuard — Main daemon
 
-Главный сервис, управляющий XDP-защитой и веб-интерфейсом.
+Primary service that manages XDP protection and the web interface.
 """
+
+# gevent monkey-patching MUST happen before any other import so that the
+# standard-library networking primitives (socket, ssl, threading, …) are
+# replaced by gevent-aware equivalents before any other module imports them.
+try:
+    from gevent import monkey
+    monkey.patch_all()
+    _GEVENT_AVAILABLE = True
+except ImportError:
+    _GEVENT_AVAILABLE = False
 
 import sys
 import logging
 import signal
+import subprocess
 import time
 from pathlib import Path
 
-# Добавить корень проекта в путь
+# Add project root to path
 sys.path.insert(0, str(Path(__file__).parent))
 
 from python.config import Config
@@ -19,7 +30,7 @@ from python.xdpmanager import XDPManager
 from python.attack_detector import AttackDetector
 from web.app import create_app
 
-# Настройка логирования
+# Configure logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -32,92 +43,162 @@ logger = logging.getLogger(__name__)
 
 
 class XDPGuardDaemon:
-    """Основной демон XDPGuard"""
+    """XDPGuard main daemon"""
 
-    def __init__(self, config_path="/etc/xdpguard/config.yaml"):
+    def __init__(self, config_path: str = "/etc/xdpguard/config.yaml") -> None:
         self.config = Config(config_path)
-        # XDPManager создаёт ConfigSync внутри себя
+        # XDPManager creates ConfigSync internally
         self.xdp_manager = XDPManager(self.config)
         self.attack_detector = AttackDetector(self.xdp_manager, self.config)
         self.running = True
+        self._web_server = None  # gevent WSGIServer instance, set in start()
 
-        # Установить обработчики сигналов
+        # Register signal handlers
         signal.signal(signal.SIGTERM, self.shutdown)
         signal.signal(signal.SIGINT, self.shutdown)
 
-    def start(self):
-        """Запустить демон"""
+    def _detach_stale_xdp(self) -> None:
+        """Снять устаревшую XDP-программу с интерфейса перед загрузкой."""
+        interface: str = self.config.get('network.interface', 'eth0')
+        try:
+            subprocess.run(
+                ['ip', 'link', 'set', 'dev', interface, 'xdp', 'off'],
+                capture_output=True,
+                timeout=5,
+            )
+            logger.debug(f"Устаревшая XDP-программа снята с интерфейса {interface}")
+        except (subprocess.TimeoutExpired, OSError) as e:
+            logger.debug(f"Не удалось снять XDP с интерфейса {interface} (игнорируется): {e}")
+
+    def start(self) -> None:
+        """Start the daemon"""
         logger.info("=" * 60)
         logger.info("Запуск XDPGuard...")
         logger.info("=" * 60)
 
-        # Загрузить XDP-программу
-        try:
-            if not self.xdp_manager.load_program():
-                logger.error("Не удалось загрузить XDP-программу")
-                sys.exit(1)
-            logger.info("✓ XDP-программа успешно загружена")
-            logger.info("✓ ConfigSync завершена (обработана XDPManager)")
-        except Exception as e:
-            logger.error(f"Ошибка инициализации XDP: {e}")
-            sys.exit(1)
+        # Load XDP program with retry logic
+        max_attempts: int = 3
+        backoff_delays: list[int] = [5, 10, 20]
+        last_exception: Exception | None = None
 
-        # Запустить детектор атак
+        for attempt in range(1, max_attempts + 1):
+            self._detach_stale_xdp()
+            try:
+                if not self.xdp_manager.load_program():
+                    raise RuntimeError("load_program() вернул False")
+                logger.info("XDP-программа успешно загружена")
+                logger.info("Синхронизация конфигурации выполнена (обрабатывается XDPManager)")
+                break
+            except Exception as e:
+                last_exception = e
+                if attempt < max_attempts:
+                    delay: int = backoff_delays[attempt - 1]
+                    logger.warning(
+                        f"Попытка {attempt}/{max_attempts} загрузки XDP не удалась: {e}. "
+                        f"Повтор через {delay} с."
+                    )
+                    time.sleep(delay)
+                else:
+                    logger.critical(
+                        f"Все {max_attempts} попытки загрузки XDP завершились неудачей. "
+                        f"Последняя ошибка: {e}"
+                    )
+                    raise RuntimeError(
+                        f"Не удалось загрузить XDP-программу после {max_attempts} попыток"
+                    ) from last_exception
+
+        # Start attack detector
         try:
             self.attack_detector.start()
-            logger.info("✓ Детектор атак запущен")
+            logger.info("Attack detector started")
         except Exception as e:
-            logger.error(f"Не удалось запустить детектор атак: {e}")
+            logger.error(f"Failed to start attack detector: {e}")
 
-        # Запустить веб-интерфейс
-        web_host = self.config.get('web.host', '0.0.0.0')
-        web_port = self.config.get('web.port', 8080)
+        # Start web interface
+        web_host: str = self.config.get('web.host', '0.0.0.0')
+        web_port: int = self.config.get('web.port', 8080)
         app = create_app(self.config, self.xdp_manager)
 
-        logger.info(f"✓ Веб-интерфейс запускается на http://{web_host}:{web_port}")
+        logger.info(f"Веб-интерфейс запускается на http://{web_host}:{web_port}")
         logger.info("=" * 60)
-        logger.info("XDPGuard работает. Для остановки нажмите Ctrl+C.")
+        logger.info("XDPGuard запущен. Для остановки нажмите Ctrl+C.")
         logger.info("=" * 60)
 
-        try:
-            app.run(
-                host=web_host,
-                port=web_port,
-                debug=False,
-                use_reloader=False
+        if _GEVENT_AVAILABLE:
+            from gevent.pywsgi import WSGIServer
+            self._web_server = WSGIServer((web_host, web_port), app)
+            try:
+                self._web_server.serve_forever()
+            except Exception as e:
+                logger.error(f"Ошибка веб-сервера gevent: {e}")
+                self.shutdown(None, None)
+        else:
+            logger.warning(
+                "Библиотека gevent не установлена — используется встроенный сервер Flask. "
+                "Для production-среды установите gevent: pip install gevent"
             )
-        except Exception as e:
-            logger.error(f"Ошибка веб-интерфейса: {e}")
-            self.shutdown(None, None)
+            try:
+                app.run(
+                    host=web_host,
+                    port=web_port,
+                    debug=False,
+                    use_reloader=False
+                )
+            except Exception as e:
+                logger.error(f"Ошибка веб-интерфейса Flask: {e}")
+                self.shutdown(None, None)
 
-    def shutdown(self, signum, frame):
-        """Корректное завершение работы"""
-        logger.info("\n" + "=" * 60)
-        logger.info("Завершение работы XDPGuard...")
+    def shutdown(self, signum: object, frame: object) -> None:
+        """Graceful shutdown — each step is isolated so one failure never
+        prevents subsequent cleanup steps from running."""
+        logger.info("=" * 60)
+        logger.info("Остановка XDPGuard...")
         logger.info("=" * 60)
 
         self.running = False
 
-        # Остановить детектор атак
+        # Step 1: Stop gevent web server (stop accepting new requests first)
         try:
+            if self._web_server is not None:
+                logger.info("Остановка веб-сервера...")
+                self._web_server.stop(timeout=5)
+                logger.info("Веб-сервер остановлен")
+        except Exception as e:
+            logger.error(f"Ошибка при остановке веб-сервера: {e}")
+
+        # Step 2: Stop attack detector
+        try:
+            logger.info("Остановка детектора атак...")
             self.attack_detector.stop()
-            logger.info("✓ Детектор атак остановлен")
+            logger.info("Детектор атак остановлен")
         except Exception as e:
             logger.error(f"Ошибка при остановке детектора атак: {e}")
 
-        # Выгрузить XDP-программу (очистка ConfigSync происходит в XDPManager)
+        # Step 3: Stop packet capture
         try:
-            self.xdp_manager.unload_program()
-            logger.info("✓ XDP-программа выгружена")
+            logger.info("Остановка захвата пакетов...")
+            if self.xdp_manager.packet_capture is not None:
+                self.xdp_manager.packet_capture.stop()
+                logger.info("Захват пакетов остановлен")
+            else:
+                logger.info("Захват пакетов не был запущен, пропуск")
         except Exception as e:
-            logger.error(f"Ошибка при выгрузке XDP: {e}")
+            logger.error(f"Ошибка при остановке захвата пакетов: {e}")
 
-        logger.info("✓ XDPGuard остановлен")
+        # Step 4: Unload XDP program from the network interface
+        try:
+            logger.info("Выгрузка XDP-программы...")
+            self.xdp_manager.unload_program()
+            logger.info("XDP-программа выгружена")
+        except Exception as e:
+            logger.error(f"Ошибка при выгрузке XDP-программы: {e}")
+
+        logger.info("XDPGuard остановлен")
         sys.exit(0)
 
 
-def main():
-    """Точка входа"""
+def main() -> None:
+    """Entry point"""
     daemon = XDPGuardDaemon()
     daemon.start()
 

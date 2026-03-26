@@ -140,8 +140,20 @@ else
     
     # Set detected interface
     sed -i "s/interface:.*/interface: $INTERFACE/" /etc/xdpguard/config.yaml
-    
+
+    # Generate unique cryptographic secrets so every fresh installation has
+    # distinct credentials.  python3 is guaranteed present at this point
+    # (installed in Step 1).
+    SECRET_KEY=$(python3 -c "import secrets; print(secrets.token_hex(32))")
+    API_KEY=$(python3 -c "import secrets; print(secrets.token_hex(32))")
+
+    # Replace the placeholder values written by the template config.
+    sed -i "s/secret_key:.*/secret_key: $SECRET_KEY/" /etc/xdpguard/config.yaml
+    sed -i "s/api_key:.*/api_key: \"$API_KEY\"/" /etc/xdpguard/config.yaml
+
     echo -e "${GREEN}✓ Config installed to /etc/xdpguard/config.yaml${NC}"
+    echo -e "${YELLOW}  Generated secret_key and api_key — save the API key for CLI access:${NC}"
+    echo -e "  api_key: $API_KEY"
 fi
 
 # Step 6: Install systemd service

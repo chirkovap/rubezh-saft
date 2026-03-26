@@ -6,12 +6,61 @@ Provides REST API and web dashboard for XDP management.
 """
 
 from flask import Flask, render_template, jsonify, request, send_from_directory
+import ipaddress
 import logging
 import os
 import secrets
 from functools import wraps
 
 logger = logging.getLogger(__name__)
+
+# Keys that callers are permitted to modify via POST /api/config.
+# Only protection.* keys are exposed; server, logging, and secret_key are
+# intentionally excluded.  Each entry maps the dot-path to a (type, min, max)
+# tuple.  For boolean fields min/max are None (not applicable).
+MUTABLE_CONFIG_KEYS: dict = {
+    'protection.enabled':          (bool,  None,    None),
+    'protection.syn_rate':         (int,   1,       1_000_000),
+    'protection.syn_burst':        (int,   1,       1_000_000),
+    'protection.conn_rate':        (int,   1,       1_000_000),
+    'protection.conn_burst':       (int,   1,       1_000_000),
+    'protection.udp_rate':         (int,   1,       1_000_000),
+    'protection.udp_burst':        (int,   1,       1_000_000),
+    'protection.icmp_rate':        (int,   1,       1_000_000),
+    'protection.icmp_burst':       (int,   1,       1_000_000),
+    'protection.drop_rate_threshold': (int, 1,      100),
+    'protection.pps_threshold':    (int,   1,       10_000_000),
+    'protection.check_interval':   (int,   1,       3_600),
+}
+
+
+def _validate_config_key(key: str, value) -> str | None:
+    """Validate a single config key/value pair against the whitelist.
+
+    Returns an error string on failure, or None when the value is acceptable.
+    """
+    if key not in MUTABLE_CONFIG_KEYS:
+        return f"Key '{key}' is not allowed; only protection.* keys may be changed via the API"
+
+    expected_type, min_val, max_val = MUTABLE_CONFIG_KEYS[key]
+
+    if not isinstance(value, expected_type):
+        # Python's json decoder maps JSON booleans to bool correctly, but an
+        # integer such as 1 also passes isinstance(..., int) because bool is a
+        # subclass of int — guard against that for bool fields.
+        if expected_type is bool or not isinstance(value, expected_type):
+            return (
+                f"Key '{key}' expects {expected_type.__name__}, "
+                f"got {type(value).__name__}"
+            )
+
+    if expected_type is int:
+        if min_val is not None and value < min_val:
+            return f"Key '{key}' must be >= {min_val}, got {value}"
+        if max_val is not None and value > max_val:
+            return f"Key '{key}' must be <= {max_val}, got {value}"
+
+    return None
 
 
 def create_app(config, xdp_manager):
@@ -92,15 +141,23 @@ def create_app(config, xdp_manager):
         try:
             data = request.json
             ip = data.get('ip')
-            
+
             if not ip:
                 return jsonify({'success': False, 'error': 'IP address required'}), 400
-            
-            success = xdp_manager.block_ip(ip)
+
+            try:
+                validated_ip = str(ipaddress.ip_address(ip))
+            except ValueError:
+                return jsonify({'error': f'Invalid IP address: {ip}'}), 400
+
+            if validated_ip == request.remote_addr:
+                return jsonify({'error': 'Cannot block your own IP'}), 400
+
+            success = xdp_manager.block_ip(validated_ip)
             
             return jsonify({
                 'success': success,
-                'message': f'IP {ip} blocked' if success else 'Failed to block IP'
+                'message': f'IP {validated_ip} blocked' if success else 'Failed to block IP'
             })
         except Exception as e:
             logger.error(f"Failed to block IP: {e}")
@@ -113,15 +170,20 @@ def create_app(config, xdp_manager):
         try:
             data = request.json
             ip = data.get('ip')
-            
+
             if not ip:
                 return jsonify({'success': False, 'error': 'IP address required'}), 400
-            
-            success = xdp_manager.unblock_ip(ip)
-            
+
+            try:
+                validated_ip = str(ipaddress.ip_address(ip))
+            except ValueError:
+                return jsonify({'error': f'Invalid IP address: {ip}'}), 400
+
+            success = xdp_manager.unblock_ip(validated_ip)
+
             return jsonify({
                 'success': success,
-                'message': f'IP {ip} unblocked' if success else 'Failed to unblock IP'
+                'message': f'IP {validated_ip} unblocked' if success else 'Failed to unblock IP'
             })
         except Exception as e:
             logger.error(f"Failed to unblock IP: {e}")
@@ -280,12 +342,26 @@ def create_app(config, xdp_manager):
                 return jsonify({'error': 'Invalid API key'}), 401
             try:
                 data = request.json
-                # Update config values
+                if not isinstance(data, dict) or not data:
+                    return jsonify({'error': 'Request body must be a non-empty JSON object'}), 400
+
+                # Validate every key before applying any change so the request
+                # is all-or-nothing (no partial updates on mixed valid/invalid input).
+                errors = {}
+                for key, value in data.items():
+                    err = _validate_config_key(key, value)
+                    if err:
+                        errors[key] = err
+
+                if errors:
+                    return jsonify({'error': 'Invalid config keys or values', 'details': errors}), 400
+
+                # All values passed validation — apply them now.
                 for key, value in data.items():
                     config.set(key, value)
-                
+
                 config.save()
-                
+
                 return jsonify({
                     'success': True,
                     'message': 'Configuration updated'

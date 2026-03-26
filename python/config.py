@@ -5,6 +5,7 @@ XDPGuard Configuration Manager
 Handles loading and managing YAML configuration.
 """
 
+import secrets
 import yaml
 import logging
 from pathlib import Path
@@ -88,9 +89,11 @@ class Config:
                 'whitelist_ips': ['127.0.0.0/8', '10.0.0.0/8']
             },
             'web': {
-                'host': '0.0.0.0',
+                'host': '127.0.0.1',  # Bind to localhost only; set to 0.0.0.0 (with firewall rules) to allow remote access
                 'port': 8080,
-                'secret_key': 'change-this-key'
+                # Generated at runtime so every installation that falls back to
+                # the default config gets a unique, unpredictable key.
+                'secret_key': secrets.token_hex(32)
             },
             'logging': {
                 'level': 'INFO',
