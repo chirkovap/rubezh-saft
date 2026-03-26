@@ -112,7 +112,13 @@ web:
   
   # Secret key for session management (CHANGE THIS IN PRODUCTION!)
   secret_key: change-this-secret-key-in-production
-  
+
+  # API key for authenticating POST requests to the REST API.
+  # Leave empty to disable POST endpoints until a key is set.
+  # Generate a strong key with: python3 -c "import secrets; print(secrets.token_hex(32))"
+  # CHANGE THIS IN PRODUCTION!
+  api_key: ""
+
   # Enable debug mode (DO NOT use in production)
   debug: false
 

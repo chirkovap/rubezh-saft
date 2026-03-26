@@ -8,6 +8,8 @@ Provides REST API and web dashboard for XDP management.
 from flask import Flask, render_template, jsonify, request, send_from_directory
 import logging
 import os
+import secrets
+from functools import wraps
 
 logger = logging.getLogger(__name__)
 
@@ -27,11 +29,40 @@ def create_app(config, xdp_manager):
     app.config['XDP_MANAGER'] = xdp_manager
     app.config['CONFIG'] = config
 
+    # Retrieve the configured API key once at app creation time.
+    # An empty string means "not configured" — all POST requests will be
+    # rejected with 403 until a real key is set in config.yaml.
+    _api_key = config.get('web.api_key', '')
+
+    def require_auth(f):
+        """Decorator that enforces X-API-Key authentication on POST endpoints.
+
+        Behaviour:
+          - api_key not configured (empty) → 403
+          - X-API-Key header missing       → 401
+          - X-API-Key header wrong value   → 401
+          - X-API-Key header correct       → pass through
+        """
+        @wraps(f)
+        def decorated(*args, **kwargs):
+            if not _api_key:
+                return jsonify({'error': 'API key not configured'}), 403
+            client_key = request.headers.get('X-API-Key', '')
+            if not client_key:
+                return jsonify({'error': 'Missing X-API-Key header'}), 401
+            # Timing-safe comparison to prevent timing-based key enumeration
+            if not secrets.compare_digest(client_key, _api_key):
+                return jsonify({'error': 'Invalid API key'}), 401
+            return f(*args, **kwargs)
+        return decorated
+
     # Routes
     @app.route('/')
     def index():
-        """Main dashboard page"""
-        return render_template('dashboard.html')
+        """Main dashboard page — injects API key for JS POST calls"""
+        # The key is injected server-side so the browser can include it in
+        # fetch() headers without a separate round-trip endpoint.
+        return render_template('dashboard.html', api_key=_api_key)
 
     @app.route('/api/status')
     def api_status():
@@ -55,6 +86,7 @@ def create_app(config, xdp_manager):
             return jsonify({'error': str(e)}), 500
 
     @app.route('/api/block', methods=['POST'])
+    @require_auth
     def api_block():
         """Block an IP address"""
         try:
@@ -75,6 +107,7 @@ def create_app(config, xdp_manager):
             return jsonify({'success': False, 'error': str(e)}), 500
 
     @app.route('/api/unblock', methods=['POST'])
+    @require_auth
     def api_unblock():
         """Unblock an IP address"""
         try:
@@ -109,6 +142,7 @@ def create_app(config, xdp_manager):
             return jsonify({'error': str(e)}), 500
 
     @app.route('/api/clear-rate-limits', methods=['POST'])
+    @require_auth
     def api_clear_rate_limits():
         """Clear rate limiting counters"""
         try:
@@ -169,6 +203,7 @@ def create_app(config, xdp_manager):
             return jsonify({'error': str(e)}), 500
 
     @app.route('/api/events/clear', methods=['POST'])
+    @require_auth
     def api_clear_events():
         """Очистить логи событий"""
         try:
@@ -214,6 +249,7 @@ def create_app(config, xdp_manager):
             return jsonify({'error': str(e)}), 500
 
     @app.route('/api/packets/clear', methods=['POST'])
+    @require_auth
     def api_clear_packets():
         """Очистить логи пакетов"""
         try:
@@ -234,6 +270,14 @@ def create_app(config, xdp_manager):
         if request.method == 'GET':
             return jsonify(config.config)
         elif request.method == 'POST':
+            # POST to /api/config requires authentication
+            if not _api_key:
+                return jsonify({'error': 'API key not configured'}), 403
+            client_key = request.headers.get('X-API-Key', '')
+            if not client_key:
+                return jsonify({'error': 'Missing X-API-Key header'}), 401
+            if not secrets.compare_digest(client_key, _api_key):
+                return jsonify({'error': 'Invalid API key'}), 401
             try:
                 data = request.json
                 # Update config values

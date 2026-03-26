@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="api-key" content="{{ api_key }}">
     <title>XDPGuard Dashboard - Защита от DDoS</title>
     
     <!-- Bootstrap CSS -->
@@ -852,6 +853,11 @@
             updateLanguage(savedLang);
         })();
         
+        // API key injected server-side — read once from the meta tag so all
+        // POST fetch() calls can include the X-API-Key header without a
+        // separate endpoint or hardcoded value.
+        const API_KEY = document.querySelector('meta[name="api-key"]').getAttribute('content') || '';
+
         // Global filters
         let currentEventTypeFilter = null;
         let currentSeverityFilter = null;
@@ -1182,7 +1188,7 @@
             
             fetch('/api/events/clear', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' }
+                headers: { 'Content-Type': 'application/json', 'X-API-Key': API_KEY }
             })
             .then(res => res.json())
             .then(data => {
@@ -1206,7 +1212,7 @@
             
             fetch('/api/packets/clear', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' }
+                headers: { 'Content-Type': 'application/json', 'X-API-Key': API_KEY }
             })
             .then(res => res.json())
             .then(data => {
@@ -1233,7 +1239,7 @@
             
             fetch('/api/block', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', 'X-API-Key': API_KEY },
                 body: JSON.stringify({ ip: ip })
             })
             .then(res => res.json())
@@ -1270,7 +1276,7 @@
             const lang = document.body.getAttribute('data-lang');
             fetch('/api/unblock', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', 'X-API-Key': API_KEY },
                 body: JSON.stringify({ ip: ip })
             })
             .then(res => res.json())
@@ -1299,7 +1305,7 @@
             
             fetch('/api/clear-rate-limits', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' }
+                headers: { 'Content-Type': 'application/json', 'X-API-Key': API_KEY }
             })
             .then(res => res.json())
             .then(data => {
