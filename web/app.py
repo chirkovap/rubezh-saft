@@ -326,6 +326,18 @@ def create_app(config, xdp_manager):
 
     # ========== END PACKET ENDPOINTS ==========
 
+    @app.route('/api/health')
+    def api_health():
+        """Return liveness/readiness status based on whether XDP is loaded."""
+        try:
+            xdp_loaded = bool(xdp_manager.xdp_loaded)
+            if xdp_loaded:
+                return jsonify({'status': 'healthy', 'xdp_loaded': True}), 200
+            return jsonify({'status': 'unhealthy', 'xdp_loaded': False}), 503
+        except Exception as e:
+            logger.error(f"Health check failed: {e}")
+            return jsonify({'error': str(e)}), 500
+
     @app.route('/api/config', methods=['GET', 'POST'])
     def api_config():
         """Get or update configuration"""
@@ -377,5 +389,20 @@ def create_app(config, xdp_manager):
     @app.errorhandler(500)
     def internal_error(error):
         return jsonify({'error': 'Internal server error'}), 500
+
+    @app.after_request
+    def set_security_headers(response):
+        """Attach security headers to every response."""
+        response.headers['X-Content-Type-Options'] = 'nosniff'
+        response.headers['X-Frame-Options'] = 'DENY'
+        response.headers['X-XSS-Protection'] = '1; mode=block'
+        response.headers['Content-Security-Policy'] = (
+            "default-src 'self'; "
+            "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+            "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; "
+            "font-src 'self' https://cdnjs.cloudflare.com"
+        )
+        response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+        return response
 
     return app

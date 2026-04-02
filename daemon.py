@@ -17,6 +17,7 @@ except ImportError:
 
 import sys
 import logging
+import logging.handlers
 import signal
 import subprocess
 import time
@@ -35,7 +36,11 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler('/var/log/xdpguard.log'),
+        logging.handlers.RotatingFileHandler(
+            '/var/log/xdpguard.log',
+            maxBytes=50 * 1024 * 1024,
+            backupCount=5,
+        ),
         logging.StreamHandler()
     ]
 )

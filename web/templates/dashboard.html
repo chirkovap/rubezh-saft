@@ -695,6 +695,13 @@
     
     <!-- Custom JavaScript -->
     <script>
+        // XSS prevention: escape all dynamic data before inserting into innerHTML
+        function escapeHtml(str) {
+            const div = document.createElement('div');
+            div.appendChild(document.createTextNode(String(str ?? '')));
+            return div.innerHTML;
+        }
+
         // Internationalization
         const translations = {
             ru: {
@@ -915,20 +922,22 @@
                         return;
                     }
                     
+                    let blockedHtml = '';
                     data.blocked_ips.forEach((ip, index) => {
-                        const row = `
+                        const safeIp = escapeHtml(ip);
+                        blockedHtml += `
                             <tr>
                                 <td>${index + 1}</td>
-                                <td><code>${ip}</code></td>
+                                <td><code>${safeIp}</code></td>
                                 <td>
-                                    <button class="btn btn-sm btn-success" onclick="unblockIPDirect('${ip}')">
+                                    <button class="btn btn-sm btn-success" onclick="unblockIPDirect('${safeIp}')">
                                         <i class="fas fa-check"></i> <span data-i18n="btn_unblock">${document.body.getAttribute('data-lang') === 'en' ? 'Unblock' : 'Разблокировать'}</span>
                                     </button>
                                 </td>
                             </tr>
                         `;
-                        tbody.innerHTML += row;
                     });
+                    tbody.innerHTML = blockedHtml;
                 })
                 .catch(err => console.error('Error loading blocked IPs:', err));
         }
@@ -959,26 +968,27 @@
                         return;
                     }
                     
+                    let eventsHtml = '';
                     data.events.forEach((event, index) => {
                         const timestamp = new Date(event.timestamp).toLocaleString('ru-RU');
-                        const severityClass = `severity-${event.severity}`;
+                        const severityClass = `severity-${escapeHtml(event.severity)}`;
                         const severityBadge = getSeverityBadge(event.severity);
                         const typeBadge = getTypeBadge(event.type);
-                        
-                        const row = `
+
+                        eventsHtml += `
                             <tr class="event-row ${severityClass}" onclick="showEventDetails(${index})" data-event='${JSON.stringify(event).replace(/'/g, "&apos;")}'>
-                                <td class="event-timestamp">${timestamp}</td>
+                                <td class="event-timestamp">${escapeHtml(timestamp)}</td>
                                 <td>${typeBadge}</td>
                                 <td>${severityBadge}</td>
-                                <td><code>${event.ip}</code></td>
-                                <td>${event.message}</td>
+                                <td><code>${escapeHtml(event.ip)}</code></td>
+                                <td>${escapeHtml(event.message)}</td>
                                 <td class="text-center">
                                     <i class="fas fa-eye clickable-icon"></i>
                                 </td>
                             </tr>
                         `;
-                        tbody.innerHTML += row;
                     });
+                    tbody.innerHTML = eventsHtml;
                     
                     currentEventData = data.events;
                 })
@@ -1023,29 +1033,30 @@
                         return;
                     }
                     
+                    let packetsHtml = '';
                     data.packets.forEach((packet, index) => {
                         const timestamp = new Date(packet.timestamp).toLocaleString('ru-RU');
-                        const actionClass = `action-${packet.action}`;
+                        const actionClass = `action-${escapeHtml(packet.action)}`;
                         const actionBadge = getActionBadge(packet.action);
                         const protocolBadge = getProtocolBadge(packet.protocol);
-                        
-                        const row = `
+
+                        packetsHtml += `
                             <tr class="packet-row ${actionClass}" onclick="showPacketDetails(${index})" data-packet='${JSON.stringify(packet).replace(/'/g, "&apos;")}'>
-                                <td class="packet-timestamp">${timestamp}</td>
-                                <td><code>${packet.src_ip}</code></td>
-                                <td><code>${packet.dst_ip}</code></td>
+                                <td class="packet-timestamp">${escapeHtml(timestamp)}</td>
+                                <td><code>${escapeHtml(packet.src_ip)}</code></td>
+                                <td><code>${escapeHtml(packet.dst_ip)}</code></td>
                                 <td>${protocolBadge}</td>
-                                <td>${packet.src_port || '-'}</td>
-                                <td>${packet.dst_port || '-'}</td>
-                                <td>${packet.size} B</td>
+                                <td>${escapeHtml(packet.src_port || '-')}</td>
+                                <td>${escapeHtml(packet.dst_port || '-')}</td>
+                                <td>${escapeHtml(packet.size)} B</td>
                                 <td>${actionBadge}</td>
                                 <td class="text-center">
                                     <i class="fas fa-eye clickable-icon"></i>
                                 </td>
                             </tr>
                         `;
-                        tbody.innerHTML += row;
                     });
+                    tbody.innerHTML = packetsHtml;
                     
                     currentPacketData = data.packets;
                 })
@@ -1123,7 +1134,7 @@
                 'WARNING': 'warning',
                 'INFO': 'info'
             };
-            return `<span class="badge bg-${colors[severity] || 'secondary'} event-badge">${severity}</span>`;
+            return `<span class="badge bg-${colors[severity] || 'secondary'} event-badge">${escapeHtml(severity)}</span>`;
         }
 
         function getTypeBadge(type) {
@@ -1136,7 +1147,7 @@
                 'DROP': '<i class="fas fa-times text-danger"></i>',
                 'ATTACK': '<i class="fas fa-exclamation-triangle text-danger"></i>'
             };
-            return `${icons[type] || ''} <span class="event-badge">${type}</span>`;
+            return `${icons[type] || ''} <span class="event-badge">${escapeHtml(type)}</span>`;
         }
 
         function getActionBadge(action) {
@@ -1148,7 +1159,7 @@
                 'PASS': '<i class="fas fa-check"></i>',
                 'DROP': '<i class="fas fa-times"></i>'
             };
-            return `${icons[action] || ''} <span class="badge bg-${colors[action] || 'secondary'} packet-badge">${action}</span>`;
+            return `${icons[action] || ''} <span class="badge bg-${colors[action] || 'secondary'} packet-badge">${escapeHtml(action)}</span>`;
         }
 
         function getProtocolBadge(protocol) {
@@ -1158,7 +1169,7 @@
                 'ICMP': 'warning',
                 'OTHER': 'secondary'
             };
-            return `<span class="badge bg-${colors[protocol] || 'secondary'}">${protocol}</span>`;
+            return `<span class="badge bg-${colors[protocol] || 'secondary'}">${escapeHtml(protocol)}</span>`;
         }
 
         function filterEvents(type) {
