@@ -26,6 +26,9 @@ echo -e "${GREEN}  САФТ Рубеж Installation Script${NC}"
 echo -e "${GREEN}=====================================${NC}"
 echo ""
 
+# Determine source directory regardless of where script is called from
+SCRIPT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+
 # Check if running as root
 if [ "$EUID" -ne 0 ]; then
     echo -e "${RED}ERROR: Please run as root (use sudo)${NC}"
@@ -78,23 +81,22 @@ fi
 # Step 3: Compile XDP program
 echo -e "${GREEN}[3/8] Compiling XDP program...${NC}"
 
-if [ ! -f "bpf/xdp_filter.c" ]; then
-    echo -e "${RED}ERROR: bpf/xdp_filter.c not found. Are you in the rubezh-saft directory?${NC}"
+if [ ! -f "$SCRIPT_DIR/bpf/xdp_filter.c" ]; then
+    echo -e "${RED}ERROR: bpf/xdp_filter.c not found in $SCRIPT_DIR${NC}"
     exit 1
 fi
 
-mkdir -p build
+mkdir -p "$SCRIPT_DIR/build"
 
 echo "  Running clang compiler..."
-# Fixed compilation flags - no 32-bit stubs needed
 clang -O2 -g -target bpf \
     -D__TARGET_ARCH_x86 \
     -D__BPF_TRACING__ \
     -I/usr/include/x86_64-linux-gnu \
-    -c bpf/xdp_filter.c \
-    -o build/xdp_filter.o 2>&1 | head -20
+    -c "$SCRIPT_DIR/bpf/xdp_filter.c" \
+    -o "$SCRIPT_DIR/build/xdp_filter.o" 2>&1 | head -20
 
-if [ ! -f "build/xdp_filter.o" ]; then
+if [ ! -f "$SCRIPT_DIR/build/xdp_filter.o" ]; then
     echo -e "${RED}ERROR: XDP compilation failed${NC}"
     echo -e "${YELLOW}Try installing: sudo apt-get install gcc-multilib${NC}"
     exit 1
@@ -111,14 +113,18 @@ mkdir -p /usr/lib/rubezh-saft
 mkdir -p /etc/rubezh-saft
 mkdir -p /var/log
 
-echo "  Copying Python files..."
-cp -r python /opt/rubezh-saft/
-cp -r web /opt/rubezh-saft/
-cp daemon.py /opt/rubezh-saft/
-cp cli.py /opt/rubezh-saft/
+if [ "$SCRIPT_DIR" != "/opt/rubezh-saft" ]; then
+    echo "  Copying Python files..."
+    cp -r "$SCRIPT_DIR/python" /opt/rubezh-saft/
+    cp -r "$SCRIPT_DIR/web" /opt/rubezh-saft/
+    cp "$SCRIPT_DIR/daemon.py" /opt/rubezh-saft/
+    cp "$SCRIPT_DIR/cli.py" /opt/rubezh-saft/
+else
+    echo "  Already in /opt/rubezh-saft, skipping file copy"
+fi
 
 echo "  Copying XDP program..."
-cp build/xdp_filter.o /usr/lib/rubezh-saft/
+cp "$SCRIPT_DIR/build/xdp_filter.o" /usr/lib/rubezh-saft/
 
 echo -e "${GREEN}✓ Files installed to /opt/rubezh-saft${NC}"
 
@@ -131,8 +137,8 @@ if [ "$UPDATE_MODE" = true ] && [ -f "/etc/rubezh-saft/config.yaml" ]; then
     sed -i "s/interface:.*/interface: $INTERFACE/" /etc/rubezh-saft/config.yaml
 else
     # Fresh install - copy config and customize
-    if [ -f "config/config.yaml" ]; then
-        cp config/config.yaml /etc/rubezh-saft/config.yaml
+    if [ -f "$SCRIPT_DIR/config/config.yaml" ]; then
+        cp "$SCRIPT_DIR/config/config.yaml" /etc/rubezh-saft/config.yaml
     else
         echo -e "${RED}ERROR: config/config.yaml not found${NC}"
         exit 1
