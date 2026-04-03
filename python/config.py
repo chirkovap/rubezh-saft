@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-XDPGuard Configuration Manager
+Модуль управления конфигурацией САФТ Рубеж
 
-Handles loading and managing YAML configuration.
+Загружает и управляет YAML-конфигурацией.
 """
 
 import secrets
@@ -15,67 +15,67 @@ logger = logging.getLogger(__name__)
 
 
 class Config:
-    """Configuration manager for XDPGuard"""
+    """Менеджер конфигурации САФТ Рубеж"""
 
-    def __init__(self, config_path: str = "/etc/xdpguard/config.yaml"):
+    def __init__(self, config_path: str = "/etc/rubezh-saft/config.yaml"):
         self.config_path = Path(config_path)
         self.config = self.load()
 
     def load(self) -> dict:
-        """Load configuration from YAML file"""
+        """Загрузить конфигурацию из YAML-файла"""
         if not self.config_path.exists():
-            logger.error(f"Config file not found: {self.config_path}")
+            logger.error(f"Файл конфигурации не найден: {self.config_path}")
             return self._default_config()
 
         try:
             with open(self.config_path, 'r') as f:
                 config = yaml.safe_load(f)
-                logger.info(f"Configuration loaded from {self.config_path}")
+                logger.info(f"Конфигурация загружена из {self.config_path}")
                 return config
         except Exception as e:
-            logger.error(f"Failed to load config: {e}")
+            logger.error(f"Не удалось загрузить конфигурацию: {e}")
             return self._default_config()
 
     def save(self) -> bool:
-        """Save current configuration to YAML file"""
+        """Сохранить текущую конфигурацию в YAML-файл"""
         try:
             with open(self.config_path, 'w') as f:
                 yaml.dump(self.config, f, default_flow_style=False)
-                logger.info(f"Configuration saved to {self.config_path}")
+                logger.info(f"Конфигурация сохранена в {self.config_path}")
                 return True
         except Exception as e:
-            logger.error(f"Failed to save config: {e}")
+            logger.error(f"Не удалось сохранить конфигурацию: {e}")
             return False
 
     def get(self, path: str, default: Any = None) -> Any:
-        """Get configuration value by dot notation path
-        
-        Example: config.get('network.interface', 'eth0')
+        """Получить значение конфигурации по пути в точечной нотации
+
+        Пример: config.get('network.interface', 'eth0')
         """
         keys = path.split('.')
         value = self.config
-        
+
         for key in keys:
             if isinstance(value, dict):
                 value = value.get(key, default)
             else:
                 return default
-                
+
         return value
 
     def set(self, path: str, value: Any) -> bool:
-        """Set configuration value by dot notation path"""
+        """Установить значение конфигурации по пути в точечной нотации"""
         keys = path.split('.')
         target = self.config
-        
+
         for key in keys[:-1]:
             target = target.setdefault(key, {})
-            
+
         target[keys[-1]] = value
         return True
 
     def _default_config(self) -> dict:
-        """Return default configuration"""
+        """Вернуть конфигурацию по умолчанию"""
         return {
             'network': {
                 'interface': 'eth0',
@@ -89,30 +89,30 @@ class Config:
                 'whitelist_ips': ['127.0.0.0/8', '10.0.0.0/8']
             },
             'web': {
-                'host': '127.0.0.1',  # Bind to localhost only; set to 0.0.0.0 (with firewall rules) to allow remote access
+                'host': '127.0.0.1',  # Привязка только к localhost; установите 0.0.0.0 (с правилами брандмауэра) для удалённого доступа
                 'port': 8080,
-                # Generated at runtime so every installation that falls back to
-                # the default config gets a unique, unpredictable key.
+                # Генерируется в рантайме, чтобы каждая установка
+                # с конфигурацией по умолчанию получала уникальный ключ.
                 'secret_key': secrets.token_hex(32)
             },
             'logging': {
                 'level': 'INFO',
-                'file': '/var/log/xdpguard.log'
+                'file': '/var/log/rubezh-saft.log'
             }
         }
 
     def validate(self) -> bool:
-        """Validate configuration"""
+        """Проверить конфигурацию"""
         required_keys = ['network', 'protection', 'web', 'logging']
-        
+
         for key in required_keys:
             if key not in self.config:
-                logger.error(f"Missing required config section: {key}")
+                logger.error(f"Отсутствует обязательная секция конфигурации: {key}")
                 return False
-                
+
         return True
 
     def reload(self) -> bool:
-        """Reload configuration from file"""
+        """Перезагрузить конфигурацию из файла"""
         self.config = self.load()
         return self.validate()

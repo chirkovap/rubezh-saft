@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Packet Logger for XDPGuard
+САФТ Рубеж — Журнал пакетов
 
-Stores detailed information about every packet passing through the system.
+Хранит подробную информацию о каждом пакете, проходящем через систему.
 """
 
 import time
@@ -20,38 +20,38 @@ logger = logging.getLogger(__name__)
 
 class PacketLogger:
     """
-    Stores and manages detailed packet logs with filtering capabilities.
-    Similar to event_logger but specialized for packet-level data.
+    Хранит и управляет детальными логами пакетов с возможностью фильтрации.
+    Аналогично event_logger, но специализирован для данных уровня пакетов.
     """
 
     def __init__(self, max_packets: int = 10000) -> None:
         """
-        Initialize packet logger.
+        Инициализировать журнал пакетов.
 
         Args:
-            max_packets: Maximum number of packets to store in memory
+            max_packets: Максимальное количество пакетов в памяти
         """
         self._packets: deque = deque(maxlen=max_packets)
         self._lock = Lock()
         self.max_packets = max_packets
-        logger.info(f"PacketLogger initialized with max_packets={max_packets}")
+        logger.info(f"PacketLogger инициализирован (max_packets={max_packets})")
 
     def log_packet(self, src_ip: str, dst_ip: str, protocol: str,
                    src_port: Optional[int] = None, dst_port: Optional[int] = None,
                    size: int = 0, action: str = "PASS",
                    reason: Optional[str] = None) -> None:
         """
-        Log a single packet.
+        Записать один пакет в журнал.
 
         Args:
-            src_ip: Source IP address (string)
-            dst_ip: Destination IP address (string)
-            protocol: Protocol name (TCP/UDP/ICMP/OTHER)
-            src_port: Source port (optional)
-            dst_port: Destination port (optional)
-            size: Packet size in bytes
-            action: Action taken (PASS/DROP)
-            reason: Reason for action (optional)
+            src_ip: IP-адрес источника (строка)
+            dst_ip: IP-адрес назначения (строка)
+            protocol: Имя протокола (TCP/UDP/ICMP/OTHER)
+            src_port: Порт источника (опционально)
+            dst_port: Порт назначения (опционально)
+            size: Размер пакета в байтах
+            action: Выполненное действие (PASS/DROP)
+            reason: Причина действия (опционально)
         """
         packet = {
             'timestamp': datetime.utcnow().isoformat() + 'Z',
@@ -71,18 +71,18 @@ class PacketLogger:
     def get_packets(self, limit: int = 100, action: Optional[str] = None,
                     protocol: Optional[str] = None) -> list:
         """
-        Get packet logs with optional filtering.
+        Получить логи пакетов с опциональной фильтрацией.
 
         Args:
-            limit: Maximum number of packets to return
-            action: Filter by action (PASS/DROP)
-            protocol: Filter by protocol (TCP/UDP/ICMP)
+            limit: Максимальное количество возвращаемых пакетов
+            action: Фильтр по действию (PASS/DROP)
+            protocol: Фильтр по протоколу (TCP/UDP/ICMP)
 
         Returns:
-            List of packet dictionaries, newest first
+            Список словарей пакетов, новые первыми
         """
         with self._lock:
-            # Iterate reversed deque directly — avoids an intermediate list copy
+            # Итерация по перевёрнутой deque — избегаем промежуточной копии
             packets = [
                 p for p in reversed(self._packets)
                 if (action is None or p['action'] == action)
@@ -93,10 +93,10 @@ class PacketLogger:
 
     def get_stats(self) -> dict:
         """
-        Get packet logging statistics.
+        Получить статистику журнала пакетов.
 
         Returns:
-            Dictionary with statistics
+            Словарь со статистикой
         """
         with self._lock:
             packets = list(self._packets)
@@ -116,13 +116,13 @@ class PacketLogger:
         one_hour_ago = now - timedelta(hours=1)
 
         for packet in packets:
-            # Count by action
+            # Подсчёт по действию
             stats['by_action'][packet['action']] += 1
 
-            # Count by protocol
+            # Подсчёт по протоколу
             stats['by_protocol'][packet['protocol']] += 1
 
-            # Count recent packets
+            # Подсчёт недавних пакетов
             try:
                 packet_time = datetime.fromisoformat(packet['timestamp'].replace('Z', '+00:00'))
                 if packet_time.replace(tzinfo=None) >= one_minute_ago:
@@ -132,7 +132,7 @@ class PacketLogger:
             except ValueError:
                 logger.error(f"Некорректный формат временной метки пакета: {packet.get('timestamp')}")
 
-        # Convert defaultdict to regular dict
+        # Преобразовать defaultdict в обычный dict
         stats['by_action'] = dict(stats['by_action'])
         stats['by_protocol'] = dict(stats['by_protocol'])
 
@@ -140,34 +140,32 @@ class PacketLogger:
 
     def clear(self) -> int:
         """
-        Clear all packet logs.
+        Очистить все логи пакетов.
 
         Returns:
-            Number of packets cleared
+            Количество удалённых записей
         """
         with self._lock:
             count = len(self._packets)
             self._packets.clear()
 
-        logger.info(f"Cleared {count} packet logs")
+        logger.info(f"Очищено {count} записей в журнале пакетов")
         return count
 
     def process_bpf_event(self, cpu: int, data: bytes, size: int) -> None:
         """
-        Process packet event from BPF perf buffer.
+        Обработать событие пакета из BPF perf buffer.
 
-        This is a callback function that will be called by BCC when
-        a packet event is received from the eBPF program.
+        Функция обратного вызова, вызываемая BCC при получении
+        события пакета из eBPF-программы.
 
         Args:
-            cpu: CPU number
-            data: Raw packet data from BPF
-            size: Size of data
+            cpu: Номер CPU
+            data: Сырые данные пакета из BPF
+            size: Размер данных
         """
         try:
-            # Parse the packet event structure
-            # This structure should match the one defined in the eBPF program
-            # Example structure (adjust based on your eBPF code):
+            # Структура события пакета (соответствует C-структуре в eBPF):
             # struct packet_event {
             #     __u32 src_ip;
             #     __u32 dst_ip;
@@ -178,15 +176,15 @@ class PacketLogger:
             #     __u32 size;
             # };
 
-            # Unpack data (adjust format string based on your structure)
+            # Распаковать данные (формат соответствует структуре eBPF-программы)
             src_ip_int, dst_ip_int, src_port, dst_port, protocol_num, action_num, pkt_size = \
                 struct.unpack('IIHHHBI', data[:20])
 
-            # Convert IP addresses to string format
+            # Преобразовать IP из сетевого порядка байт
             src_ip = socket.inet_ntoa(struct.pack('I', src_ip_int))
             dst_ip = socket.inet_ntoa(struct.pack('I', dst_ip_int))
 
-            # Map protocol number to name
+            # Маппинг номера протокола в имя
             protocol_map = {
                 6: 'TCP',
                 17: 'UDP',
@@ -194,10 +192,10 @@ class PacketLogger:
             }
             protocol = protocol_map.get(protocol_num, 'OTHER')
 
-            # Map action number to name
+            # Маппинг действия
             action = 'PASS' if action_num == 0 else 'DROP'
 
-            # Log the packet
+            # Передать в журнал пакетов
             self.log_packet(
                 src_ip=src_ip,
                 dst_ip=dst_ip,
@@ -209,4 +207,4 @@ class PacketLogger:
             )
 
         except Exception as e:
-            logger.error(f"Failed to process BPF packet event: {e}")
+            logger.error(f"Ошибка обработки BPF-события пакета: {e}")

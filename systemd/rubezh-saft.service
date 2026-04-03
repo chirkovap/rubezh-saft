@@ -1,17 +1,17 @@
 [Unit]
-Description=XDPGuard DDoS Protection System
+Description=САФТ Рубеж — Система Анализа и Фильтрации Трафика
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
 User=root
-WorkingDirectory=/opt/xdpguard
+WorkingDirectory=/opt/rubezh-saft
 # Remove any stale XDP program left behind by a previous crash or unclean stop.
-# The interface name must match network.interface in /etc/xdpguard/config.yaml.
+# The interface name must match network.interface in /etc/rubezh-saft/config.yaml.
 # Replace "ens33" below if your interface name differs.
 ExecStartPre=-/sbin/ip link set dev ens33 xdp off
-ExecStart=/usr/bin/python3 /opt/xdpguard/daemon.py
+ExecStart=/usr/bin/python3 /opt/rubezh-saft/daemon.py
 Restart=on-failure
 RestartSec=10s
 

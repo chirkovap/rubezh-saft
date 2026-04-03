@@ -1,117 +1,89 @@
-# Логирование пакетов в XDPGuard
+# Журналирование пакетов в САФТ "Рубеж"
 
 ## Обзор
 
-XDPGuard теперь поддерживает детальное логирование всех сетевых пакетов, проходящих через систему. Эта функция позволяет в реальном времени отслеживать:
+Программный комплекс САФТ "Рубеж" поддерживает детальное журналирование сетевых пакетов, проходящих через систему фильтрации. Функция обеспечивает мониторинг в реальном времени следующих параметров:
 
-- **Source IP** и **Destination IP** каждого пакета
-- **Протокол**: TCP, UDP, ICMP или другие
-- **Порты** источника и назначения
-- **Размер пакета** в байтах
-- **Действие**: PASS (пропущен) или DROP (заблокирован)
-- **Временная метка** с точностью до наносекунд
+- IP-адрес источника и IP-адрес назначения
+- Протокол: TCP, UDP, ICMP или иные
+- Порты источника и назначения
+- Размер пакета в байтах
+- Решение фильтра: PASS (пропущен) или DROP (заблокирован)
+- Временная метка с точностью до наносекунд
 
 ## Архитектура
 
 ### Компоненты
 
-1. **eBPF программа** (`bpf/xdp_filter_with_logging.c`)
-   - Работает на уровне ядра Linux
-   - Перехватывает каждый пакет на уровне сетевого интерфейса
-   - Извлекает метаданные пакета
-   - Отправляет данные через **perf buffer** в userspace
+1. **Модуль PacketLogger** (`python/packet_logger.py`)
+   - Хранит до 10 000 пакетов в памяти (deque)
+   - Поддерживает фильтрацию по протоколу и решению фильтра
+   - Сбор агрегированной статистики
 
-2. **PacketLogger** (`python/packet_logger.py`)
-   - Python класс для управления логами
-   - Хранит до 10,000 пакетов в памяти (deque)
-   - Поддерживает фильтрацию по протоколу и действию
-   - Собирает статистику
+2. **Веб API** (`web/app.py`)
+   - `/api/packets` — получение журнала пакетов
+   - `/api/packets/stats` — статистика по пакетам
+   - `/api/packets/clear` — очистка журнала
 
-3. **Web API** (`web/app.py`)
-   - REST API endpoints для доступа к логам
-   - `/api/packets` - получение логов
-   - `/api/packets/stats` - статистика
-   - `/api/packets/clear` - очистка логов
-
-4. **Web Dashboard** (`web/templates/dashboard.html`)
-   - Третья вкладка "Логи пакетов"
+3. **Веб-панель управления** (`web/templates/dashboard.html`)
+   - Вкладка "Журнал пакетов"
    - Таблица с детальными данными
-   - Фильтры и поиск
-   - Автообновление каждые 2 секунды
+   - Фильтры по действию и протоколу
+   - Автоматическое обновление каждые 2 секунды
 
-## Установка и Настройка
+## Настройка
 
-### 1. Компиляция eBPF программы
+### Конфигурация
 
-```bash
-cd bpf/
-make
-
-# Или вручную:
-clang -O2 -g -target bpf -c xdp_filter_with_logging.c -o xdp_filter_with_logging.o
-```
-
-### 2. Установка Python зависимостей
-
-```bash
-pip install -r requirements.txt
-```
-
-### 3. Конфигурация
-
-Добавьте в `config.yaml`:
+Добавить или проверить в `/etc/rubezh-saft/config.yaml`:
 
 ```yaml
 logging:
-  max_packets: 10000          # Максимальное количество пакетов в памяти
-  enable_packet_logging: true # Включить логирование пакетов
+  enable_packet_logging: true  # Включить журналирование пакетов
+  max_packets: 10000            # Максимальное количество пакетов в памяти
 
 xdp:
-  object_path: "/usr/lib/xdpguard/xdp_filter_with_logging.o"
+  object_path: "/usr/lib/rubezh-saft/xdp_filter.o"
 ```
 
-### 4. Запуск
+Применить изменения:
 
 ```bash
-# Запустить демон
-sudo python3 daemon.py
-
-# Запустить web-интерфейс
-python3 -m web.app
+sudo systemctl restart rubezh-saft
 ```
 
 ## Использование
 
-### Web Интерфейс
+### Веб-интерфейс
 
-1. Откройте браузер: `http://localhost:5000`
-2. Перейдите на вкладку "Логи пакетов"
-3. Используйте фильтры:
-   - **По действию**: Все / PASS / DROP
-   - **По протоколу**: Все / TCP / UDP / ICMP
+1. Открыть панель управления: `http://<IP-сервера>:8080`
+2. Перейти на вкладку "Журнал пакетов"
+3. Доступные фильтры:
+   - По действию: Все / PASS / DROP
+   - По протоколу: Все / TCP / UDP / ICMP
 
-### API Endpoints
+### API
 
-#### Получить логи пакетов
+#### Получить журнал пакетов
 
 ```bash
-# Все пакеты
-curl http://localhost:5000/api/packets?limit=50
+# Все пакеты (последние 50)
+curl http://localhost:8080/api/packets?limit=50
 
-# Только заблокированные
-curl http://localhost:5000/api/packets?action=DROP
+# Только заблокированные пакеты
+curl http://localhost:8080/api/packets?action=DROP
 
-# Только TCP
-curl http://localhost:5000/api/packets?protocol=TCP
+# Только TCP-пакеты
+curl http://localhost:8080/api/packets?protocol=TCP
 
 # Комбинация фильтров
-curl http://localhost:5000/api/packets?action=DROP&protocol=UDP&limit=100
+curl http://localhost:8080/api/packets?action=DROP&protocol=UDP&limit=100
 ```
 
-#### Статистика
+#### Статистика пакетов
 
 ```bash
-curl http://localhost:5000/api/packets/stats
+curl http://localhost:8080/api/packets/stats
 ```
 
 Пример ответа:
@@ -134,13 +106,13 @@ curl http://localhost:5000/api/packets/stats
 }
 ```
 
-#### Очистить логи
+#### Очистить журнал
 
 ```bash
-curl -X POST http://localhost:5000/api/packets/clear
+curl -X POST http://localhost:8080/api/packets/clear
 ```
 
-## Структура данных пакета
+## Структура записи пакета
 
 ```json
 {
@@ -158,66 +130,51 @@ curl -X POST http://localhost:5000/api/packets/clear
 
 ## Производительность
 
-### Влияние на производительность
+Влияние на пропускную способность:
+- Журналирование выключено: около 10–15 млн пакетов/с
+- Журналирование включено: около 5–8 млн пакетов/с
 
-- **Логирование выключено**: ~10-15 млн pps
-- **Логирование включено**: ~5-8 млн pps
+Рекомендации для высоконагруженных систем:
+1. Журналировать только заблокированные пакеты (action=DROP)
+2. Применять сэмплирование: записывать каждый N-й пакет
+3. Уменьшить значение `max_packets` для снижения потребления памяти
 
-### Оптимизация
-
-Для высоконагруженных систем:
-
-1. **Выборочное логирование**: логируйте только DROP пакеты
-2. **Sampling**: логируйте каждый N-й пакет
-3. **Уменьшите max_packets**: храните меньше пакетов в памяти
-
-## Управление логированием
-
-### Включить/Выключить логирование
+## Управление журналированием через bpftool
 
 ```bash
-# Включить
+# Включить журналирование
 sudo bpftool map update name logging_config key hex 00 00 00 00 value hex 01
 
-# Выключить
+# Выключить журналирование
 sudo bpftool map update name logging_config key hex 00 00 00 00 value hex 00
 
-# Проверить состояние
+# Проверить текущее состояние
 sudo bpftool map dump name logging_config
 ```
 
-## Примеры использования
+## Примеры аналитических запросов
 
-### 1. Мониторинг DDoS атак
-
-Просмотр всех заблокированных пакетов за последнюю минуту:
+### Мониторинг заблокированных пакетов
 
 ```bash
-curl http://localhost:5000/api/packets?action=DROP&limit=1000 | jq
+curl http://localhost:8080/api/packets?action=DROP&limit=1000 | jq
 ```
 
-### 2. Анализ трафика
-
-Посмотреть, какие протоколы используются:
+### Анализ распределения трафика по протоколам
 
 ```bash
-curl -s http://localhost:5000/api/packets/stats | jq '.by_protocol'
+curl -s http://localhost:8080/api/packets/stats | jq '.by_protocol'
 ```
 
-### 3. Поиск по IP
+## Интеграция с внешними системами
 
-В web-интерфейсе используйте Ctrl+F для поиска по конкретному IP.
+Журнал пакетов может быть интегрирован с внешними системами анализа:
+- Elasticsearch / Kibana
+- Splunk
+- Graylog
+- Grafana Loki
 
-## Интеграция с SIEM
-
-Логи пакетов можно экспортировать в:
-
-- **Elasticsearch/Kibana** (аналог ELK)
-- **Splunk**
-- **Graylog**
-- **Grafana Loki**
-
-Пример отправки в Elasticsearch:
+Пример экспорта в Elasticsearch:
 
 ```python
 from elasticsearch import Elasticsearch
@@ -225,45 +182,39 @@ from elasticsearch import Elasticsearch
 es = Elasticsearch(['http://localhost:9200'])
 
 for packet in xdp_manager.get_packet_logs(limit=1000):
-    es.index(index='xdpguard-packets', body=packet)
+    es.index(index='rubezh-saft-packets', body=packet)
 ```
 
-## Трублшутинг
+## Устранение неисправностей
 
-### Логи не появляются
+### Журнал пакетов не заполняется
 
-1. Проверьте, что логирование включено:
-```bash
-sudo bpftool map dump name logging_config
-```
+1. Проверить, что журналирование включено в конфигурации:
+   ```bash
+   grep enable_packet_logging /etc/rubezh-saft/config.yaml
+   ```
 
-2. Проверьте, что XDP программа загружена:
-```bash
-sudo ip link show ens33
-```
+2. Проверить, что XDP-программа загружена:
+   ```bash
+   sudo ip link show ens33
+   ```
 
-3. Проверьте логи daemon:
-```bash
-sudo journalctl -u xdpguard -f
-```
+3. Проверить журнал сервиса:
+   ```bash
+   sudo journalctl -u rubezh-saft -f
+   ```
 
-### Низкая производительность
+### Снижение производительности из-за журналирования
 
-Если логирование замедляет систему:
+1. Отключить журналирование PASS-пакетов, оставив только DROP
+2. Уменьшить значение `max_packets` в конфигурации
+3. Проверить наличие достаточного объёма оперативной памяти
 
-1. Выключите логирование PASS пакетов
-2. Увеличьте размер perf buffer
-3. Используйте sampling (1 из N пакетов)
+## Планируемые улучшения
 
-## Будущие улучшения
-
-- [ ] Автоматический экспорт в syslog
-- [ ] Поддержка IPv6
-- [ ] Детальный анализ TCP флагов
-- [ ] GeoIP информация
-- [ ] Агрегация потоков (NetFlow/sFlow)
-- [ ] Machine Learning для обнаружения аномалий
-
-## Лицензия
-
-GPL v3 - см. LICENSE файл
+- Автоматический экспорт в syslog
+- Поддержка IPv6
+- Детальный анализ TCP-флагов
+- Geo-IP информация для IP-адресов источника
+- Агрегация сетевых потоков (NetFlow/sFlow)
+- Обнаружение аномалий методами машинного обучения

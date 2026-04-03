@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# XDPGuard Update Script
+# САФТ "Рубеж" Update Script
 # Автоматическое обновление системы защиты от DDoS
 
 set -e  # Остановка при ошибке
@@ -13,7 +13,7 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${BLUE}    XDPGuard - Скрипт автоматического обновления${NC}"
+echo -e "${BLUE}    САФТ "Рубеж" - Скрипт автоматического обновления${NC}"
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 
@@ -24,11 +24,11 @@ if [[ $EUID -ne 0 ]]; then
    exit 1
 fi
 
-# Путь к XDPGuard
-XDPGUARD_PATH="/opt/xdpguard"
+# Путь к САФТ "Рубеж"
+XDPGUARD_PATH="/opt/rubezh-saft"
 
 if [ ! -d "$XDPGUARD_PATH" ]; then
-    echo -e "${RED}✗ Директория XDPGuard не найдена: $XDPGUARD_PATH${NC}"
+    echo -e "${RED}✗ Директория САФТ "Рубеж" не найдена: $XDPGUARD_PATH${NC}"
     exit 1
 fi
 
@@ -51,18 +51,18 @@ if [ "$CURRENT_COMMIT" == "$REMOTE_COMMIT" ]; then
     echo -e "${BLUE}Хотите перезапустить сервис? (y/n)${NC}"
     read -r response
     if [[ "$response" =~ ^([yY][eE][sS]|[yY]|[дД][аА]|[дД])$ ]]; then
-        echo -e "${YELLOW}[6/6]${NC} Перезапуск XDPGuard..."
-        systemctl restart xdpguard
+        echo -e "${YELLOW}[6/6]${NC} Перезапуск САФТ "Рубеж"..."
+        systemctl restart rubezh-saft
         sleep 2
-        systemctl status xdpguard --no-pager
+        systemctl status rubezh-saft --no-pager
         echo -e "${GREEN}✓ Сервис перезапущен${NC}"
     fi
     exit 0
 fi
 
 echo ""
-echo -e "${YELLOW}[3/6]${NC} Остановка сервиса XDPGuard..."
-systemctl stop xdpguard 2>/dev/null || echo "      Сервис не запущен"
+echo -e "${YELLOW}[3/6]${NC} Остановка сервиса САФТ "Рубеж"..."
+systemctl stop rubezh-saft 2>/dev/null || echo "      Сервис не запущен"
 echo -e "${GREEN}✓ Сервис остановлен${NC}"
 
 echo ""
@@ -77,30 +77,30 @@ find . -type f -name "*.pyc" -delete 2>/dev/null || true
 echo -e "${GREEN}✓ Кэш очищен${NC}"
 
 echo ""
-echo -e "${YELLOW}[6/6]${NC} Запуск XDPGuard..."
-systemctl start xdpguard
+echo -e "${YELLOW}[6/6]${NC} Запуск САФТ "Рубеж"..."
+systemctl start rubezh-saft
 sleep 2
 
 echo ""
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 
-if systemctl is-active --quiet xdpguard; then
-    echo -e "${GREEN}✓ XDPGuard успешно обновлён и запущен!${NC}"
+if systemctl is-active --quiet rubezh-saft; then
+    echo -e "${GREEN}✓ САФТ "Рубеж" успешно обновлён и запущен!${NC}"
     echo ""
     echo -e "${GREEN}Изменения:${NC}"
     git log --oneline "$CURRENT_COMMIT".."$REMOTE_COMMIT" | head -5 | sed 's/^/  • /'
     echo ""
     echo -e "${BLUE}Статус сервиса:${NC}"
-    systemctl status xdpguard --no-pager | head -10
+    systemctl status rubezh-saft --no-pager | head -10
     echo ""
     echo -e "${GREEN}Веб-интерфейс доступен по адресу:${NC}"
     IP=$(hostname -I | awk '{print $1}')
     echo -e "  ${BLUE}http://${IP}:8080${NC}"
 else
-    echo -e "${RED}✗ Ошибка при запуске XDPGuard${NC}"
+    echo -e "${RED}✗ Ошибка при запуске САФТ "Рубеж"${NC}"
     echo ""
     echo -e "${YELLOW}Проверьте логи:${NC}"
-    echo -e "  sudo journalctl -u xdpguard -n 30 --no-pager"
+    echo -e "  sudo journalctl -u rubezh-saft -n 30 --no-pager"
     exit 1
 fi
 

@@ -1,4 +1,4 @@
-# XDPGuard BPF Makefile
+# САФТ "Рубеж" BPF Makefile
 # Compiles XDP program with proper flags
 
 CLANG := clang
@@ -16,7 +16,7 @@ SRC := xdp_filter.c
 OBJ := xdp_filter.o
 
 # Installation path
-INSTALL_DIR := /usr/lib/xdpguard
+INSTALL_DIR := /usr/lib/rubezh-saft
 
 .PHONY: all clean install uninstall
 

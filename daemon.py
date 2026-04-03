@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """
-XDPGuard — Main daemon
+САФТ Рубеж — Главный демон системы
 
-Primary service that manages XDP protection and the web interface.
+Основной сервис управления XDP-защитой и веб-интерфейсом.
 """
 
-# gevent monkey-patching MUST happen before any other import so that the
-# standard-library networking primitives (socket, ssl, threading, …) are
-# replaced by gevent-aware equivalents before any other module imports them.
+# gevent monkey-patching должен выполняться до всех остальных импортов,
+# чтобы заменить сетевые примитивы стандартной библиотеки
+# до их импорта другими модулями.
 try:
     from gevent import monkey
     monkey.patch_all()
@@ -23,7 +23,7 @@ import subprocess
 import time
 from pathlib import Path
 
-# Add project root to path
+# Добавить корень проекта в путь импорта
 sys.path.insert(0, str(Path(__file__).parent))
 
 from python.config import Config
@@ -31,13 +31,13 @@ from python.xdpmanager import XDPManager
 from python.attack_detector import AttackDetector
 from web.app import create_app
 
-# Configure logging
+# Настройка логирования
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
         logging.handlers.RotatingFileHandler(
-            '/var/log/xdpguard.log',
+            '/var/log/rubezh-saft.log',
             maxBytes=50 * 1024 * 1024,
             backupCount=5,
         ),
@@ -47,18 +47,18 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-class XDPGuardDaemon:
-    """XDPGuard main daemon"""
+class RubezhDaemon:
+    """Главный демон САФТ Рубеж"""
 
-    def __init__(self, config_path: str = "/etc/xdpguard/config.yaml") -> None:
+    def __init__(self, config_path: str = "/etc/rubezh-saft/config.yaml") -> None:
         self.config = Config(config_path)
-        # XDPManager creates ConfigSync internally
+        # XDPManager создаёт ConfigSync внутри
         self.xdp_manager = XDPManager(self.config)
         self.attack_detector = AttackDetector(self.xdp_manager, self.config)
         self.running = True
         self._web_server = None  # gevent WSGIServer instance, set in start()
 
-        # Register signal handlers
+        # Регистрация обработчиков сигналов
         signal.signal(signal.SIGTERM, self.shutdown)
         signal.signal(signal.SIGINT, self.shutdown)
 
@@ -76,12 +76,12 @@ class XDPGuardDaemon:
             logger.debug(f"Не удалось снять XDP с интерфейса {interface} (игнорируется): {e}")
 
     def start(self) -> None:
-        """Start the daemon"""
+        """Запустить демон"""
         logger.info("=" * 60)
-        logger.info("Запуск XDPGuard...")
+        logger.info("Запуск САФТ Рубеж...")
         logger.info("=" * 60)
 
-        # Load XDP program with retry logic
+        # Загрузка XDP-программы с повторными попытками
         max_attempts: int = 3
         backoff_delays: list[int] = [5, 10, 20]
         last_exception: Exception | None = None
@@ -112,21 +112,21 @@ class XDPGuardDaemon:
                         f"Не удалось загрузить XDP-программу после {max_attempts} попыток"
                     ) from last_exception
 
-        # Start attack detector
+        # Запуск детектора атак
         try:
             self.attack_detector.start()
-            logger.info("Attack detector started")
+            logger.info("Детектор атак запущен")
         except Exception as e:
-            logger.error(f"Failed to start attack detector: {e}")
+            logger.error(f"Не удалось запустить детектор атак: {e}")
 
-        # Start web interface
+        # Запуск веб-интерфейса
         web_host: str = self.config.get('web.host', '0.0.0.0')
         web_port: int = self.config.get('web.port', 8080)
         app = create_app(self.config, self.xdp_manager)
 
         logger.info(f"Веб-интерфейс запускается на http://{web_host}:{web_port}")
         logger.info("=" * 60)
-        logger.info("XDPGuard запущен. Для остановки нажмите Ctrl+C.")
+        logger.info("САФТ Рубеж запущен. Для остановки нажмите Ctrl+C.")
         logger.info("=" * 60)
 
         if _GEVENT_AVAILABLE:
@@ -154,10 +154,10 @@ class XDPGuardDaemon:
                 self.shutdown(None, None)
 
     def shutdown(self, signum: object, frame: object) -> None:
-        """Graceful shutdown — each step is isolated so one failure never
-        prevents subsequent cleanup steps from running."""
+        """Плановое завершение — каждый шаг изолирован, чтобы ошибка
+        одного не блокировала последующие этапы очистки."""
         logger.info("=" * 60)
-        logger.info("Остановка XDPGuard...")
+        logger.info("Остановка САФТ Рубеж...")
         logger.info("=" * 60)
 
         self.running = False
@@ -198,13 +198,13 @@ class XDPGuardDaemon:
         except Exception as e:
             logger.error(f"Ошибка при выгрузке XDP-программы: {e}")
 
-        logger.info("XDPGuard остановлен")
+        logger.info("САФТ Рубеж остановлен")
         sys.exit(0)
 
 
 def main() -> None:
-    """Entry point"""
-    daemon = XDPGuardDaemon()
+    """Точка входа"""
+    daemon = RubezhDaemon()
     daemon.start()
 
 

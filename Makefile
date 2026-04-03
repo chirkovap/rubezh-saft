@@ -1,4 +1,4 @@
-# XDPGuard Makefile
+# САФТ "Рубеж" Makefile
 # Automatic compilation of XDP/eBPF programs
 
 CLANG := clang
@@ -42,10 +42,10 @@ $(BPF_OBJ): $(BPF_SRC)
 
 install: $(BPF_OBJ)
 	@echo "Installing XDP program..."
-	@mkdir -p /usr/lib/xdpguard
-	@cp $(BPF_OBJ) /usr/lib/xdpguard/xdp_filter.o
-	@echo "✓ Installed to: /usr/lib/xdpguard/xdp_filter.o"
-	@ls -lh /usr/lib/xdpguard/xdp_filter.o
+	@mkdir -p /usr/lib/rubezh-saft
+	@cp $(BPF_OBJ) /usr/lib/rubezh-saft/xdp_filter.o
+	@echo "✓ Installed to: /usr/lib/rubezh-saft/xdp_filter.o"
+	@ls -lh /usr/lib/rubezh-saft/xdp_filter.o
 
 clean:
 	@echo "Cleaning..."
@@ -53,11 +53,11 @@ clean:
 	@echo "✓ Cleaned"
 
 help:
-	@echo "XDPGuard Makefile"
+	@echo "САФТ \"Рубеж\" Makefile"
 	@echo ""
 	@echo "Usage:"
 	@echo "  make           - Compile XDP program"
-	@echo "  make install   - Install XDP program to /usr/lib/xdpguard/"
+	@echo "  make install   - Install XDP program to /usr/lib/rubezh-saft/"
 	@echo "  make clean     - Remove compiled files"
 	@echo "  make check-deps - Check if dependencies are installed"
 	@echo ""

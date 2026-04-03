@@ -1,300 +1,231 @@
-# 🚀 XDPGuard Quick Start Guide
+# Краткое руководство по развертыванию САФТ "Рубеж"
 
-Быстрое развертывание за 5 минут!
+Данное руководство описывает минимальный набор шагов для быстрого ввода программного комплекса в эксплуатацию.
 
-## 📋 Минимальные требования
 
-- Ubuntu 20.04+ / Debian 11+ / CentOS 8+ / Kali Linux
-- Linux kernel 4.18+
-- Root права (sudo)
-- 2 GB RAM
+## Минимальные требования
 
-## ⚡ Установка за 4 шага
+- Ubuntu 20.04+ / Debian 11+ или совместимый дистрибутив
+- Ядро Linux 4.18 и выше (с поддержкой XDP)
+- Права суперпользователя (sudo)
+- Оперативная память: не менее 512 МБ
 
-### 1️⃣ Клонирование репозитория
+
+## Установка
+
+### Шаг 1. Клонирование репозитория
 
 ```bash
 cd /opt
-sudo git clone https://github.com/chirkovap/xdpguard.git
-cd xdpguard
+sudo git clone https://github.com/chirkovap/rubezh-saft.git
+cd rubezh-saft
 ```
 
-### 2️⃣ Запуск установки
+### Шаг 2. Запуск установки
 
 ```bash
 sudo chmod +x scripts/install.sh
 sudo ./scripts/install.sh
 ```
 
-Скрипт автоматически:
-- Установит все зависимости
-- Скомпилирует XDP программу
-- Настроит systemd сервис
+Скрипт автоматически выполнит следующие действия:
+- установит системные зависимости (clang, llvm, libbpf-dev, bpftool)
+- скомпилирует XDP-программу
+- установит Python-зависимости
+- настроит systemd-сервис `rubezh-saft.service`
+- создаст конфигурационный файл `/etc/rubezh-saft/config.yaml`
 
-### 3️⃣ Настройка интерфейса
+### Шаг 3. Настройка сетевого интерфейса
 
 ```bash
-# Узнайте ваш сетевой интерфейс
+# Определить имя сетевого интерфейса
 ip link show
 
-# Отредактируйте конфигурацию
-sudo nano /etc/xdpguard/config.yaml
+# Открыть конфигурацию для редактирования
+sudo nano /etc/rubezh-saft/config.yaml
 ```
 
-Измените эти параметры:
+Указать корректное имя интерфейса:
 
 ```yaml
 network:
-  interface: ens33        # ← Замените на ваш интерфейс (eth0, ens3, и т.д.)
-  xdp_mode: xdpgeneric   # ← Оставьте xdpgeneric для совместимости
+  interface: ens33      # Заменить на актуальное имя (eth0, ens3 и т.д.)
+  xdp_mode: xdpgeneric  # Универсальный режим, совместимый с любым драйвером
 ```
 
-Сохраните файл (Ctrl+O, Enter, Ctrl+X).
+Сохранить файл: Ctrl+O, Enter, Ctrl+X.
 
-### 4️⃣ Запуск сервиса
+### Шаг 4. Запуск сервиса
 
 ```bash
-# Запустите XDPGuard
-sudo systemctl start xdpguard
+sudo systemctl start rubezh-saft
 
-# Проверьте статус
-sudo systemctl status xdpguard
-
-# Если всё ОК, должно показать:
-# ● xdpguard.service - XDPGuard DDoS Protection System
-#    Loaded: loaded
-#    Active: active (running)
+# Проверить статус
+sudo systemctl status rubezh-saft
 ```
 
-## ✅ Проверка работы
-
-### Проверка 1: XDP загружен
-
-```bash
-sudo ip link show <ваш-интерфейс>
+Ожидаемый вывод:
+```
+rubezh-saft.service - САФТ "Рубеж" — система защиты от DDoS
+   Loaded: loaded
+   Active: active (running)
 ```
 
-Должно показать `xdp` или `xdpgeneric` в выводе.
 
-### Проверка 2: Веб-панель работает
+## Проверка работоспособности
+
+### Проверка 1: XDP загружен в ядро
 
 ```bash
-# Проверьте API
+sudo ip link show <имя-интерфейса>
+```
+
+В выводе должна присутствовать строка `xdp` или `xdpgeneric`.
+
+### Проверка 2: Веб-панель управления доступна
+
+```bash
+# Проверить API
 curl http://localhost:8080/api/status
 
-# Откройте в браузере
+# Открыть в браузере
 firefox http://localhost:8080
 ```
 
-### Проверка 3: CLI инструменты
+### Проверка 3: CLI работает
 
 ```bash
-python3 /opt/xdpguard/cli.py status
+python3 /opt/rubezh-saft/cli.py status
 ```
 
-## 🎯 Первые шаги
 
-### Блокировка IP адреса
+## Первоначальная настройка
+
+### Добавление управляющих IP в белый список
+
+Перед активной эксплуатацией необходимо добавить IP-адрес управляющей станции в белый список, чтобы исключить самоблокировку:
+
+```yaml
+whitelist_ips:
+  - 127.0.0.1
+  - 192.168.1.0/24    # Подсеть управляющих станций
+  - 203.0.113.10      # Конкретный IP управляющей станции
+```
+
+### Настройка лимитов трафика
+
+```yaml
+protection:
+  enabled: true
+  syn_rate: 1000      # TCP SYN пакетов в секунду на IP
+  udp_rate: 500       # UDP пакетов в секунду на IP
+  icmp_rate: 100      # ICMP пакетов в секунду на IP
+```
+
+Применить изменения:
+```bash
+sudo systemctl restart rubezh-saft
+```
+
+
+## Основные операции
+
+### Блокировка IP-адреса
 
 ```bash
 # Через CLI
-python3 /opt/xdpguard/cli.py block 192.168.1.100
+python3 /opt/rubezh-saft/cli.py block 192.168.1.100
 
-# Или через API
+# Через API
 curl -X POST http://localhost:8080/api/block \
   -H "Content-Type: application/json" \
-  -d '{"ip": "192.168.1.100"}'
-
-# Или через веб-панель
-http://localhost:8080 → введите IP → нажмите Block
+  -d '{"ip": "192.168.1.100", "reason": "атака"}'
 ```
 
 ### Просмотр статистики
 
 ```bash
 # CLI
-python3 /opt/xdpguard/cli.py status
+python3 /opt/rubezh-saft/cli.py status
 
-# API
+# API с форматированием
 curl http://localhost:8080/api/status | python3 -m json.tool
-
-# Веб-панель
-http://localhost:8080
 ```
 
-### Просмотр логов
+### Просмотр журнала в реальном времени
 
 ```bash
-# Real-time логи
-sudo journalctl -u xdpguard -f
-
-# Последние 50 строк
-sudo journalctl -u xdpguard -n 50
+sudo journalctl -u rubezh-saft -f
 ```
 
-## 🔧 Базовые настройки
-
-### Изменение портов защиты
+### Мониторинг в терминале
 
 ```bash
-sudo nano /etc/xdpguard/config.yaml
-```
-
-```yaml
-network:
-  protected_ports:
-    - 80    # HTTP
-    - 443   # HTTPS
-    - 22    # SSH
-    - 3306  # MySQL (добавить)
-    - 5432  # PostgreSQL (добавить)
-```
-
-Перезапустите:
-```bash
-sudo systemctl restart xdpguard
-```
-
-### Изменение лимитов rate limiting
-
-```yaml
-protection:
-  syn_rate: 30      # SYN пакетов/сек на IP
-  conn_rate: 100    # Новых соединений/сек на IP
-  udp_rate: 50      # UDP пакетов/сек на IP
-```
-
-### Добавление whitelist IP
-
-```yaml
-whitelist_ips:
-  - 127.0.0.1
-  - 192.168.1.0/24    # ← Добавьте вашу сеть
-  - 10.0.0.5          # ← Или конкретный IP
-```
-
-## 🐛 Решение проблем
-
-### Проблема: Сервис не запускается
-
-```bash
-# Смотрите логи ошибок
-sudo journalctl -u xdpguard -n 100 --no-pager
-
-# Проверьте конфигурацию
-sudo python3 -c "import yaml; yaml.safe_load(open('/etc/xdpguard/config.yaml'))"
-```
-
-### Проблема: XDP не загружается
-
-```bash
-# Проверьте, скомпилирована ли XDP программа
-ls -la /usr/lib/xdpguard/xdp_filter.o
-
-# Если нет, перекомпилируйте
-cd /opt/xdpguard/bpf
-sudo make clean && sudo make && sudo make install
-
-# Убедитесь, что используете xdpgeneric режим
-sudo nano /etc/xdpguard/config.yaml
-# Измените: xdp_mode: xdpgeneric
-sudo systemctl restart xdpguard
-```
-
-### Проблема: Веб-панель недоступна
-
-```bash
-# Проверьте, что порт открыт
-sudo netstat -tlnp | grep 8080
-
-# Откройте в firewall
-sudo ufw allow 8080
-# или
-sudo firewall-cmd --add-port=8080/tcp --permanent
-sudo firewall-cmd --reload
-```
-
-### Проблема: "BTF is required"
-
-```bash
-# Используйте xdpgeneric режим (не требует BTF)
-sudo nano /etc/xdpguard/config.yaml
-# Измените: xdp_mode: xdpgeneric
-sudo systemctl restart xdpguard
-```
-
-## 📊 Мониторинг
-
-### Real-time мониторинг через веб-панель
-
-Откройте `http://your-server-ip:8080`
-
-Вы увидите:
-- 📈 Статистику пакетов в реальном времени
-- 🚫 Список заблокированных IP
-- 💨 Throughput и drop rate
-- ⚡ Быстрые действия (блокировка/разблокировка)
-
-### Мониторинг через CLI
-
-```bash
-# Непрерывный мониторинг
-watch -n 1 'python3 /opt/xdpguard/cli.py status'
-
-# Или через API
 watch -n 1 'curl -s http://localhost:8080/api/status | python3 -m json.tool'
 ```
 
-### Проверка BPF статистики
+
+## Диагностика BPF
 
 ```bash
-# Показать загруженные BPF программы
+# Показать загруженные BPF-программы
 sudo bpftool prog show
 
-# Показать BPF карты
+# Показать BPF-карты
 sudo bpftool map show
 
-# Показать статистику сети
+# Статистика сетевого уровня
 sudo bpftool net show
 ```
 
-## 🎓 Следующие шаги
 
-1. **Настройте автоматические уведомления** - см. [README.md](README.md)
-2. **Интегрируйте с Prometheus/Grafana** - см. документацию
-3. **Оптимизируйте для production** - см. [CONTRIBUTING.md](CONTRIBUTING.md)
-4. **Попробуйте native режим (xdpdrv)** для большей производительности
+## Устранение типовых проблем
 
-## 💡 Полезные команды
+### Сервис не запускается
 
 ```bash
-# Перезапуск сервиса
-sudo systemctl restart xdpguard
+# Просмотр журнала ошибок
+sudo journalctl -u rubezh-saft -n 100 --no-pager
 
-# Остановка сервиса
-sudo systemctl stop xdpguard
-
-# Просмотр конфигурации
-cat /etc/xdpguard/config.yaml
-
-# Экспорт статистики
-python3 /opt/xdpguard/cli.py export -o stats.json
-
-# Очистка счётчиков
-python3 /opt/xdpguard/cli.py clear-rate-limits
-
-# Список всех заблокированных IP
-python3 /opt/xdpguard/cli.py list-blocked
+# Проверка синтаксиса конфигурации
+python3 -c "import yaml; yaml.safe_load(open('/etc/rubezh-saft/config.yaml'))"
 ```
 
-## 📖 Дополнительная документация
+### XDP-программа не загружается
 
-- [README.md](README.md) - Полная документация
-- [CONTRIBUTING.md](CONTRIBUTING.md) - Как внести вклад
-- [GitHub Issues](https://github.com/chirkovap/xdpguard/issues) - Сообщить о проблеме
+```bash
+# Проверить наличие скомпилированного объекта
+ls -la /usr/lib/rubezh-saft/xdp_filter.o
 
----
+# Перекомпилировать
+cd /opt/rubezh-saft/bpf
+sudo make clean && sudo make && sudo make install
 
-**Готово! Ваша система защищена от DDoS атак! 🛡️**
+# Убедиться, что установлен режим xdpgeneric
+grep xdp_mode /etc/rubezh-saft/config.yaml
+```
 
-Если возникли проблемы, создайте [Issue](https://github.com/chirkovap/xdpguard/issues) с описанием и логами.
+### Ошибка "BTF is required"
+
+```bash
+sudo nano /etc/rubezh-saft/config.yaml
+# Установить: xdp_mode: xdpgeneric
+sudo systemctl restart rubezh-saft
+```
+
+### Веб-панель недоступна
+
+```bash
+sudo netstat -tlnp | grep 8080
+
+# Открыть порт в брандмауэре
+sudo ufw allow 8080
+```
+
+
+## Следующие шаги
+
+- Полная документация: [README.md](README.md)
+- Руководство по обновлению: [UPDATE.md](UPDATE.md)
+- Участие в разработке: [CONTRIBUTING.md](CONTRIBUTING.md)
+- Сообщить о проблеме: [GitHub Issues](https://github.com/chirkovap/rubezh-saft/issues)

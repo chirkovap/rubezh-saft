@@ -1,7 +1,7 @@
-# XDPGuard Configuration File
+# САФТ Рубеж — Конфигурационный файл
 #
 # This file configures the XDP-based DDoS protection system
-# Edit values carefully and restart service after changes: systemctl restart xdpguard
+# Edit values carefully and restart service after changes: systemctl restart rubezh-saft
 
 # ===== Network Configuration =====
 network:
@@ -36,7 +36,7 @@ network:
 # ===== XDP Program Settings =====
 xdp:
   # Path to compiled XDP object file
-  object_path: /usr/lib/xdpguard/xdp_filter.o
+  object_path: /usr/lib/rubezh-saft/xdp_filter.o
   
   # Auto-reload on failure
   auto_reload: true
@@ -134,7 +134,7 @@ logging:
   max_packets: 10000
   
   # Log file path
-  file: /var/log/xdpguard.log
+  file: /var/log/rubezh-saft.log
   
   # Log rotation
   max_size: 10485760  # 10 MB
@@ -168,7 +168,7 @@ alerting:
       smtp_port: 587
       username: your-email@gmail.com
       password: your-password
-      from: xdpguard@yourdomain.com
+      from: rubezh-saft@yourdomain.com
       to:
         - admin@yourdomain.com
     

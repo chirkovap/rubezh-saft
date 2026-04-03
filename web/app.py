@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-XDPGuard Flask Web Application
+САФТ Рубеж — Веб-интерфейс
 
-Provides REST API and web dashboard for XDP management.
+REST API и дашборд для управления XDP-защитой.
 """
 
 from flask import Flask, render_template, jsonify, request, send_from_directory
@@ -14,10 +14,10 @@ from functools import wraps
 
 logger = logging.getLogger(__name__)
 
-# Keys that callers are permitted to modify via POST /api/config.
-# Only protection.* keys are exposed; server, logging, and secret_key are
-# intentionally excluded.  Each entry maps the dot-path to a (type, min, max)
-# tuple.  For boolean fields min/max are None (not applicable).
+# Ключи, разрешённые для изменения через POST /api/config.
+# Открыты только protection.* ключи; server, logging и secret_key
+# намеренно исключены. Каждый ключ маппится в (тип, мин, макс).
+# Для булевых полей мин/макс равны None.
 MUTABLE_CONFIG_KEYS: dict = {
     'protection.enabled':          (bool,  None,    None),
     'protection.syn_rate':         (int,   1,       1_000_000),
@@ -35,9 +35,9 @@ MUTABLE_CONFIG_KEYS: dict = {
 
 
 def _validate_config_key(key: str, value) -> str | None:
-    """Validate a single config key/value pair against the whitelist.
+    """Проверить пару ключ/значение конфигурации по белому списку.
 
-    Returns an error string on failure, or None when the value is acceptable.
+    Возвращает строку ошибки при неудаче или None если значение корректно.
     """
     if key not in MUTABLE_CONFIG_KEYS:
         return f"Key '{key}' is not allowed; only protection.* keys may be changed via the API"
@@ -45,9 +45,9 @@ def _validate_config_key(key: str, value) -> str | None:
     expected_type, min_val, max_val = MUTABLE_CONFIG_KEYS[key]
 
     if not isinstance(value, expected_type):
-        # Python's json decoder maps JSON booleans to bool correctly, but an
-        # integer such as 1 also passes isinstance(..., int) because bool is a
-        # subclass of int — guard against that for bool fields.
+        # Python декодирует JSON boolean в bool корректно, но целое 1
+        # тоже проходит isinstance(..., int), т.к. bool — подкласс int.
+        # Защищаемся от этого для булевых полей.
         if expected_type is bool or not isinstance(value, expected_type):
             return (
                 f"Key '{key}' expects {expected_type.__name__}, "
@@ -64,33 +64,33 @@ def _validate_config_key(key: str, value) -> str | None:
 
 
 def create_app(config, xdp_manager):
-    """Create and configure Flask application"""
-    
-    # Get the directory of this file for templates
+    """Создать и настроить Flask-приложение"""
+
+    # Определить директорию шаблонов
     template_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'templates')
     static_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static')
-    
+
     app = Flask(__name__,
                 template_folder=template_dir,
                 static_folder=static_dir)
-    
+
     app.config['SECRET_KEY'] = config.get('web.secret_key', 'dev-secret-key')
     app.config['XDP_MANAGER'] = xdp_manager
     app.config['CONFIG'] = config
 
-    # Retrieve the configured API key once at app creation time.
-    # An empty string means "not configured" — all POST requests will be
-    # rejected with 403 until a real key is set in config.yaml.
+    # Получить API-ключ один раз при создании приложения.
+    # Пустая строка означает 'не настроен' — все POST-запросы будут
+    # отклонены с 403 до установки ключа в config.yaml.
     _api_key = config.get('web.api_key', '')
 
     def require_auth(f):
-        """Decorator that enforces X-API-Key authentication on POST endpoints.
+        """Декоратор для обязательной аутентификации X-API-Key на POST-эндпоинтах.
 
-        Behaviour:
-          - api_key not configured (empty) → 403
-          - X-API-Key header missing       → 401
-          - X-API-Key header wrong value   → 401
-          - X-API-Key header correct       → pass through
+        Поведение:
+          - api_key не настроен (пустой) → 403
+          - заголовок X-API-Key отсутствует → 401
+          - заголовок X-API-Key неверный → 401
+          - заголовок X-API-Key корректный → пропуск
         """
         @wraps(f)
         def decorated(*args, **kwargs):
@@ -99,7 +99,7 @@ def create_app(config, xdp_manager):
             client_key = request.headers.get('X-API-Key', '')
             if not client_key:
                 return jsonify({'error': 'Missing X-API-Key header'}), 401
-            # Timing-safe comparison to prevent timing-based key enumeration
+            # Сравнение с постоянным временем для защиты от timing-атак
             if not secrets.compare_digest(client_key, _api_key):
                 return jsonify({'error': 'Invalid API key'}), 401
             return f(*args, **kwargs)
@@ -108,36 +108,36 @@ def create_app(config, xdp_manager):
     # Routes
     @app.route('/')
     def index():
-        """Main dashboard page — injects API key for JS POST calls"""
-        # The key is injected server-side so the browser can include it in
-        # fetch() headers without a separate round-trip endpoint.
+        """Главная страница дашборда — передаёт API-ключ в JS"""
+        # Ключ передаётся на стороне сервера, чтобы браузер мог
+        # включать его в fetch()-заголовки без отдельного запроса.
         return render_template('dashboard.html', api_key=_api_key)
 
     @app.route('/api/status')
     def api_status():
-        """Get system status and statistics"""
+        """Получить статус системы и статистику"""
         try:
             stats = xdp_manager.get_statistics()
             blocked_ips = xdp_manager.get_blocked_ips()
-            
+
             # Проверить на атаки при каждом запросе статуса
             xdp_manager.check_for_attacks()
-            
+
             return jsonify({
                 'status': 'running',
                 'protection_enabled': config.get('protection.enabled', True),
                 'stats': stats,
                 'blocked_count': len(blocked_ips),
-                'blocked_ips': blocked_ips[:20]  # Return first 20
+                'blocked_ips': blocked_ips[:20]  # Вернуть первые 20
             })
         except Exception as e:
-            logger.error(f"Failed to get status: {e}")
+            logger.error(f"Не удалось получить статус: {e}")
             return jsonify({'error': str(e)}), 500
 
     @app.route('/api/block', methods=['POST'])
     @require_auth
     def api_block():
-        """Block an IP address"""
+        """Заблокировать IP-адрес"""
         try:
             data = request.json
             ip = data.get('ip')
@@ -154,19 +154,19 @@ def create_app(config, xdp_manager):
                 return jsonify({'error': 'Cannot block your own IP'}), 400
 
             success = xdp_manager.block_ip(validated_ip)
-            
+
             return jsonify({
                 'success': success,
                 'message': f'IP {validated_ip} blocked' if success else 'Failed to block IP'
             })
         except Exception as e:
-            logger.error(f"Failed to block IP: {e}")
+            logger.error(f"Не удалось заблокировать IP: {e}")
             return jsonify({'success': False, 'error': str(e)}), 500
 
     @app.route('/api/unblock', methods=['POST'])
     @require_auth
     def api_unblock():
-        """Unblock an IP address"""
+        """Разблокировать IP-адрес"""
         try:
             data = request.json
             ip = data.get('ip')
@@ -186,40 +186,40 @@ def create_app(config, xdp_manager):
                 'message': f'IP {validated_ip} unblocked' if success else 'Failed to unblock IP'
             })
         except Exception as e:
-            logger.error(f"Failed to unblock IP: {e}")
+            logger.error(f"Не удалось разблокировать IP: {e}")
             return jsonify({'success': False, 'error': str(e)}), 500
 
     @app.route('/api/blocked')
     def api_blocked():
-        """Get list of blocked IPs"""
+        """Получить список заблокированных IP"""
         try:
             blocked_ips = xdp_manager.get_blocked_ips()
-            
+
             return jsonify({
                 'blocked_ips': blocked_ips,
                 'count': len(blocked_ips)
             })
         except Exception as e:
-            logger.error(f"Failed to get blocked IPs: {e}")
+            logger.error(f"Не удалось получить список заблокированных IP: {e}")
             return jsonify({'error': str(e)}), 500
 
     @app.route('/api/clear-rate-limits', methods=['POST'])
     @require_auth
     def api_clear_rate_limits():
-        """Clear rate limiting counters"""
+        """Сбросить счётчики ограничения трафика"""
         try:
             success = xdp_manager.clear_rate_limits()
-            
+
             return jsonify({
                 'success': success,
                 'message': 'Rate limits cleared' if success else 'Failed to clear'
             })
         except Exception as e:
-            logger.error(f"Failed to clear rate limits: {e}")
+            logger.error(f"Не удалось сбросить счётчики rate limit: {e}")
             return jsonify({'success': False, 'error': str(e)}), 500
 
     # ========== EVENT LOGGING ENDPOINTS ==========
-    
+
     @app.route('/api/events')
     def api_events():
         """Получить события безопасности"""
@@ -227,15 +227,15 @@ def create_app(config, xdp_manager):
             limit = int(request.args.get('limit', 100))
             event_type = request.args.get('type', None)
             severity = request.args.get('severity', None)
-            
+
             events = xdp_manager.get_events(limit, event_type, severity)
-            
+
             return jsonify({
                 'events': events,
                 'count': len(events)
             })
         except Exception as e:
-            logger.error(f"Failed to get events: {e}")
+            logger.error(f"Не удалось получить события: {e}")
             return jsonify({'error': str(e)}), 500
 
     @app.route('/api/events/raw')
@@ -244,14 +244,14 @@ def create_app(config, xdp_manager):
         try:
             limit = int(request.args.get('limit', 100))
             events = xdp_manager.get_events_raw(limit)
-            
+
             return jsonify({
                 'events': events,
                 'count': len(events),
                 'format': 'raw'
             })
         except Exception as e:
-            logger.error(f"Failed to get raw events: {e}")
+            logger.error(f"Не удалось получить сырые события: {e}")
             return jsonify({'error': str(e)}), 500
 
     @app.route('/api/events/stats')
@@ -261,7 +261,7 @@ def create_app(config, xdp_manager):
             stats = xdp_manager.get_event_stats()
             return jsonify(stats)
         except Exception as e:
-            logger.error(f"Failed to get event stats: {e}")
+            logger.error(f"Не удалось получить статистику событий: {e}")
             return jsonify({'error': str(e)}), 500
 
     @app.route('/api/events/clear', methods=['POST'])
@@ -275,13 +275,13 @@ def create_app(config, xdp_manager):
                 'message': f'Логи очищены ({count} событий удалено)'
             })
         except Exception as e:
-            logger.error(f"Failed to clear events: {e}")
+            logger.error(f"Не удалось очистить журнал событий: {e}")
             return jsonify({'success': False, 'error': str(e)}), 500
-    
+
     # ========== END EVENT ENDPOINTS ==========
 
     # ========== PACKET LOGGING ENDPOINTS ==========
-    
+
     @app.route('/api/packets')
     def api_packets():
         """Получить логи пакетов"""
@@ -289,15 +289,15 @@ def create_app(config, xdp_manager):
             limit = int(request.args.get('limit', 100))
             action = request.args.get('action', None)  # PASS or DROP
             protocol = request.args.get('protocol', None)  # TCP, UDP, ICMP
-            
+
             packets = xdp_manager.get_packet_logs(limit, action, protocol)
-            
+
             return jsonify({
                 'packets': packets,
                 'count': len(packets)
             })
         except Exception as e:
-            logger.error(f"Failed to get packet logs: {e}")
+            logger.error(f"Не удалось получить логи пакетов: {e}")
             return jsonify({'error': str(e)}), 500
 
     @app.route('/api/packets/stats')
@@ -307,7 +307,7 @@ def create_app(config, xdp_manager):
             stats = xdp_manager.get_packet_stats()
             return jsonify(stats)
         except Exception as e:
-            logger.error(f"Failed to get packet stats: {e}")
+            logger.error(f"Не удалось получить статистику пакетов: {e}")
             return jsonify({'error': str(e)}), 500
 
     @app.route('/api/packets/clear', methods=['POST'])
@@ -321,30 +321,30 @@ def create_app(config, xdp_manager):
                 'message': f'Логи пакетов очищены ({count} записей удалено)'
             })
         except Exception as e:
-            logger.error(f"Failed to clear packet logs: {e}")
+            logger.error(f"Не удалось очистить логи пакетов: {e}")
             return jsonify({'success': False, 'error': str(e)}), 500
 
     # ========== END PACKET ENDPOINTS ==========
 
     @app.route('/api/health')
     def api_health():
-        """Return liveness/readiness status based on whether XDP is loaded."""
+        """Вернуть статус готовности на основе состояния XDP."""
         try:
             xdp_loaded = bool(xdp_manager.xdp_loaded)
             if xdp_loaded:
                 return jsonify({'status': 'healthy', 'xdp_loaded': True}), 200
             return jsonify({'status': 'unhealthy', 'xdp_loaded': False}), 503
         except Exception as e:
-            logger.error(f"Health check failed: {e}")
+            logger.error(f"Проверка состояния завершилась ошибкой: {e}")
             return jsonify({'error': str(e)}), 500
 
     @app.route('/api/config', methods=['GET', 'POST'])
     def api_config():
-        """Get or update configuration"""
+        """Получить или обновить конфигурацию"""
         if request.method == 'GET':
             return jsonify(config.config)
         elif request.method == 'POST':
-            # POST to /api/config requires authentication
+            # POST к /api/config требует аутентификации
             if not _api_key:
                 return jsonify({'error': 'API key not configured'}), 403
             client_key = request.headers.get('X-API-Key', '')
@@ -357,8 +357,8 @@ def create_app(config, xdp_manager):
                 if not isinstance(data, dict) or not data:
                     return jsonify({'error': 'Request body must be a non-empty JSON object'}), 400
 
-                # Validate every key before applying any change so the request
-                # is all-or-nothing (no partial updates on mixed valid/invalid input).
+                # Проверяем все ключи до применения изменений — запрос атомарный
+                # (нет частичных обновлений при смешанном вводе).
                 errors = {}
                 for key, value in data.items():
                     err = _validate_config_key(key, value)
@@ -368,7 +368,7 @@ def create_app(config, xdp_manager):
                 if errors:
                     return jsonify({'error': 'Invalid config keys or values', 'details': errors}), 400
 
-                # All values passed validation — apply them now.
+                # Все значения прошли проверку — применяем.
                 for key, value in data.items():
                     config.set(key, value)
 
@@ -379,7 +379,7 @@ def create_app(config, xdp_manager):
                     'message': 'Configuration updated'
                 })
             except Exception as e:
-                logger.error(f"Failed to update config: {e}")
+                logger.error(f"Не удалось обновить конфигурацию: {e}")
                 return jsonify({'success': False, 'error': str(e)}), 500
 
     @app.errorhandler(404)
@@ -392,7 +392,7 @@ def create_app(config, xdp_manager):
 
     @app.after_request
     def set_security_headers(response):
-        """Attach security headers to every response."""
+        """Добавить заголовки безопасности к каждому ответу."""
         response.headers['X-Content-Type-Options'] = 'nosniff'
         response.headers['X-Frame-Options'] = 'DENY'
         response.headers['X-XSS-Protection'] = '1; mode=block'

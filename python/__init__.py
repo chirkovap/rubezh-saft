@@ -1,6 +1,6 @@
-"""XDPGuard Python Package
+"""САФТ Рубеж — Python-пакет
 
-High-performance DDoS protection using XDP/eBPF.
+Высокопроизводительная защита от DDoS на базе XDP/eBPF.
 """
 
 __version__ = "1.0.0"

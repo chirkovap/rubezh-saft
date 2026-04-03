@@ -1,58 +1,55 @@
-# Система логирования событий XDPGuard
+# Система журналирования событий САФТ "Рубеж"
 
 ## Обзор
 
-XDPGuard теперь включает SIEM-подобную систему логирования событий безопасности с веб-интерфейсом для мониторинга в реальном времени.
+Программный комплекс САФТ "Рубеж" включает SIEM-подобную систему журналирования событий безопасности с веб-интерфейсом для мониторинга в реальном времени.
 
-## Возможности
+## Типы событий
 
-### Типы событий
+- **BLOCK** — IP-адрес заблокирован
+- **UNBLOCK** — IP-адрес разблокирован
+- **LOAD** — XDP-программа загружена в ядро
+- **UNLOAD** — XDP-программа выгружена из ядра
+- **SYSTEM** — системные события
+- **DROP** — пакеты заблокированы по лимиту трафика
+- **ATTACK** — обнаружена атака
 
-- **BLOCK** - IP адрес заблокирован
-- **UNBLOCK** - IP адрес разблокирован
-- **LOAD** - XDP программа загружена
-- **UNLOAD** - XDP программа выгружена
-- **SYSTEM** - Системные события
-- **DROP** - Пакеты заблокированы
-- **ATTACK** - Обнаружена атака
+## Уровни серьёзности
 
-### Уровни серьезности
-
-- **INFO** - Информационные события
-- **WARNING** - Предупреждения
-- **CRITICAL** - Критические события
+- **INFO** — информационные события
+- **WARNING** — предупреждения
+- **CRITICAL** — критические события
 
 ## Использование
 
 ### Веб-интерфейс
 
-1. Откройте дашборд: `http://your-server-ip:8080`
-2. Перейдите на вкладку **"Логи событий"**
+1. Откройте панель управления: `http://<IP-сервера>:8080`
+2. Перейдите на вкладку "Журнал событий"
 3. Используйте фильтры для поиска нужных событий
 
-#### Функции вкладки логов:
-
-- **Фильтрация по типу**: BLOCK, UNBLOCK, SYSTEM, etc.
-- **Фильтрация по уровню**: INFO, WARNING, CRITICAL
-- **Автоматическое обновление**: Каждые 3 секунды
-- **Цветовое кодирование**: События выделены цветом по уровню серьезности
-- **Статистика**: Общее количество, за последний час, критические/предупреждения
+Функции вкладки:
+- Фильтрация по типу события: BLOCK, UNBLOCK, SYSTEM и т.д.
+- Фильтрация по уровню серьёзности: INFO, WARNING, CRITICAL
+- Автоматическое обновление каждые 3 секунды
+- Цветовое кодирование по уровню серьёзности
+- Счётчики: всего событий, за последний час, критические и предупреждения
 
 ### REST API
 
-#### Получить события
+#### Получить список событий
 
 ```bash
 # Все события (по умолчанию 100)
 curl http://localhost:8080/api/events
 
-# С лимитом
+# С ограничением количества
 curl http://localhost:8080/api/events?limit=50
 
-# Фильтр по типу
+# Фильтр по типу события
 curl http://localhost:8080/api/events?type=BLOCK
 
-# Фильтр по уровню
+# Фильтр по уровню серьёзности
 curl http://localhost:8080/api/events?severity=CRITICAL
 
 # Комбинированные фильтры
@@ -65,7 +62,7 @@ curl http://localhost:8080/api/events?type=BLOCK&severity=WARNING&limit=20
 curl http://localhost:8080/api/events/stats
 ```
 
-Ответ:
+Пример ответа:
 ```json
 {
   "total": 156,
@@ -86,7 +83,7 @@ curl http://localhost:8080/api/events/stats
 }
 ```
 
-#### Очистить логи
+#### Очистить журнал
 
 ```bash
 curl -X POST http://localhost:8080/api/events/clear
@@ -94,7 +91,7 @@ curl -X POST http://localhost:8080/api/events/clear
 
 ## Примеры событий
 
-### Блокировка IP
+### Блокировка IP-адреса
 
 ```json
 {
@@ -102,7 +99,7 @@ curl -X POST http://localhost:8080/api/events/clear
   "type": "BLOCK",
   "severity": "WARNING",
   "ip": "192.168.1.100",
-  "message": "IP адрес 192.168.1.100 заблокирован",
+  "message": "IP-адрес 192.168.1.100 заблокирован",
   "details": {
     "method": "manual",
     "interface": "eth0"
@@ -110,7 +107,7 @@ curl -X POST http://localhost:8080/api/events/clear
 }
 ```
 
-### Загрузка XDP
+### Загрузка XDP-программы
 
 ```json
 {
@@ -118,7 +115,7 @@ curl -X POST http://localhost:8080/api/events/clear
   "type": "LOAD",
   "severity": "INFO",
   "ip": "N/A",
-  "message": "XDP программа успешно загружена на eth0",
+  "message": "XDP-программа успешно загружена на eth0",
   "details": {
     "interface": "eth0",
     "mode": "xdpgeneric"
@@ -134,18 +131,18 @@ curl -X POST http://localhost:8080/api/events/clear
   "type": "SYSTEM",
   "severity": "CRITICAL",
   "ip": "N/A",
-  "message": "XDP программа не найдена: /usr/lib/xdpguard/xdp_filter.o",
+  "message": "XDP-программа не найдена: /usr/lib/rubezh-saft/xdp_filter.o",
   "details": {
-    "path": "/usr/lib/xdpguard/xdp_filter.o"
+    "path": "/usr/lib/rubezh-saft/xdp_filter.o"
   }
 }
 ```
 
 ## Конфигурация
 
-### Максимальное количество событий
+### Максимальное количество событий в памяти
 
-По умолчанию система хранит последние **1000 событий**. Чтобы изменить это значение, отредактируйте `python/xdpmanager.py`:
+По умолчанию система хранит последние 1000 событий. Для изменения отредактируйте `python/xdpmanager.py`:
 
 ```python
 self.event_logger = EventLogger(max_events=5000)  # увеличить до 5000
@@ -156,26 +153,24 @@ self.event_logger = EventLogger(max_events=5000)  # увеличить до 5000
 События также записываются в systemd journal:
 
 ```bash
-# Просмотр всех событий
-sudo journalctl -u xdpguard -f
+# Просмотр всех событий в реальном времени
+sudo journalctl -u rubezh-saft -f
 
-# Фильтр по BLOCK
-sudo journalctl -u xdpguard | grep "\[BLOCK\]"
+# Фильтр по событиям блокировки
+sudo journalctl -u rubezh-saft | grep "\[BLOCK\]"
 
-# Фильтр по CRITICAL
-sudo journalctl -u xdpguard -p err
+# Фильтр по критическим событиям
+sudo journalctl -u rubezh-saft -p err
 
 # Экспорт в JSON
-sudo journalctl -u xdpguard -o json > xdpguard-events.json
+sudo journalctl -u rubezh-saft -o json > rubezh-saft-events.json
 ```
 
-### Интеграция с rsyslog
-
-Для пересылки логов в централизованную SIEM-систему:
+### Пересылка в централизованную SIEM-систему через rsyslog
 
 ```bash
-# Добавьте в /etc/rsyslog.d/xdpguard.conf
-if $programname == 'xdpguard' then @@siem-server:514
+# Добавить в /etc/rsyslog.d/rubezh-saft.conf
+if $programname == 'rubezh-saft' then @@siem-server:514
 ```
 
 ## Примеры использования
@@ -183,14 +178,13 @@ if $programname == 'xdpguard' then @@siem-server:514
 ### Мониторинг блокировок в реальном времени
 
 ```bash
-# Watch for BLOCK events
-watch -n 1 'curl -s http://localhost:8080/api/events?type=BLOCK&limit=10 | jq .'
+watch -n 1 'curl -s "http://localhost:8080/api/events?type=BLOCK&limit=10" | jq .'
 ```
 
 ### Поиск критических событий
 
 ```bash
-curl -s http://localhost:8080/api/events?severity=CRITICAL | jq '.events[] | "\(.timestamp) - \(.message)"'
+curl -s "http://localhost:8080/api/events?severity=CRITICAL" | jq '.events[] | "\(.timestamp) - \(.message)"'
 ```
 
 ### Статистика блокировок
@@ -199,72 +193,62 @@ curl -s http://localhost:8080/api/events?severity=CRITICAL | jq '.events[] | "\(
 curl -s http://localhost:8080/api/events/stats | jq '.by_type.BLOCK'
 ```
 
-## Логи в Python
+## Программный интерфейс (Python)
 
-Для добавления пользовательских событий:
+Для добавления пользовательских событий из кода:
 
 ```python
 from python.xdpmanager import XDPManager
 
 xdp = XDPManager(config)
 
-# Добавить событие
 xdp.event_logger.log_event(
     event_type='ATTACK',
     severity='CRITICAL',
     ip_address='10.0.0.50',
-    message='DDoS атака обнаружена',
+    message='DDoS-атака обнаружена',
     details={
         'packets_per_sec': 100000,
         'attack_type': 'SYN Flood'
     }
 )
 
-# Получить события
 events = xdp.get_events(limit=50, event_type='ATTACK')
-
-# Статистика
 stats = xdp.get_event_stats()
-print(f"Всего событий: {stats['total']}")
-print(f"CRITICAL: {stats['by_severity'].get('CRITICAL', 0)}")
 ```
 
-## Производительность
+## Характеристики производительности
 
-- События хранятся в памяти (быстрый доступ)
-- Thread-safe реализация с Lock
-- Автоматическое удаление старых событий (ограниченный размер deque)
-- Нет влияния на производительность XDP
+- Хранение событий в памяти (быстрый доступ без дискового ввода-вывода)
+- Потокобезопасная реализация на основе Lock
+- Автоматическое вытеснение старых событий при достижении лимита (deque)
+- Нет влияния на производительность XDP-фильтра ядра
 
-## Troubleshooting
+## Устранение неисправностей
 
-### События не отображаются
+### События не отображаются в веб-интерфейсе
 
 ```bash
-# Проверьте API
+# Проверить API напрямую
 curl http://localhost:8080/api/events
 
-# Проверьте логи
-sudo journalctl -u xdpguard -n 100
+# Проверить журнал сервиса
+sudo journalctl -u rubezh-saft -n 100
 
-# Перезапустите сервис
-sudo systemctl restart xdpguard
+# Перезапустить сервис
+sudo systemctl restart rubezh-saft
 ```
 
-### Очистка логов при переполнении
-
-События автоматически удаляются после достижения `max_events`. Для ручной очистки:
+### Очистка журнала вручную
 
 ```bash
 curl -X POST http://localhost:8080/api/events/clear
 ```
 
-## Дополнительные возможности
+## Планируемые улучшения
 
-В будущем планируется:
-
-- [ ] Автоматическое обнаружение DDoS-атак
-- [ ] Email/Telegram уведомления
-- [ ] Гео-IP информация в событиях
-- [ ] Экспорт в Elasticsearch/Splunk
-- [ ] Grafana дашборды
+- Автоматическое обнаружение паттернов DDoS-атак
+- Уведомления по электронной почте и через Telegram
+- Geo-IP информация в событиях
+- Экспорт в Elasticsearch и Splunk
+- Grafana-дашборды для визуализации событий

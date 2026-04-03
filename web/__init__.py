@@ -1,4 +1,4 @@
-"""XDPGuard Web Interface
+"""САФТ Рубеж — Веб-интерфейс
 
-Flask-based web panel for managing DDoS protection.
+Веб-панель на Flask для управления защитой от DDoS.
 """

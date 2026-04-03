@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="api-key" content="{{ api_key }}">
-    <title>XDPGuard Dashboard - Защита от DDoS</title>
+    <title>САФТ Рубеж — Панель управления</title>
     
     <!-- Bootstrap CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
@@ -245,7 +245,7 @@
     <nav class="navbar navbar-dark bg-dark">
         <div class="container-fluid">
             <span class="navbar-brand mb-0 h1">
-                <i class="fas fa-shield-alt"></i> <span data-i18n="title">Панель управления XDPGuard</span>
+                <i class="fas fa-shield-alt"></i> <span data-i18n="title">САФТ "Рубеж" — Панель управления</span>
             </span>
             <div class="d-flex align-items-center">
                 <span class="lang-toggle me-3" onclick="toggleLanguage()" title="Switch Language / Сменить язык">
@@ -255,7 +255,7 @@
                     <i class="fas fa-moon" id="theme-icon"></i>
                 </span>
                 <span class="badge bg-success status-badge" id="status-badge">
-                    <i class="fas fa-check-circle"></i> <span data-i18n="xdp_active">XDP активен</span>
+                    <i class="fas fa-check-circle"></i> <span data-i18n="xdp_active">Защита активна</span>
                 </span>
             </div>
         </div>
@@ -705,8 +705,8 @@
         // Internationalization
         const translations = {
             ru: {
-                title: "Панель управления XDPGuard",
-                xdp_active: "XDP активен",
+                title: 'САФТ "Рубеж" — Панель управления',
+                xdp_active: "Защита активна",
                 tab_dashboard: "Дашборд",
                 tab_events: "Логи событий",
                 tab_packets: "Логи пакетов",
@@ -751,8 +751,8 @@
                 theme_toggle: "Переключить тему"
             },
             en: {
-                title: "XDPGuard Control Panel",
-                xdp_active: "XDP Active",
+                title: 'SAFT "Rubezh" — Control Panel',
+                xdp_active: "Protection Active",
                 tab_dashboard: "Dashboard",
                 tab_events: "Event Logs",
                 tab_packets: "Packet Logs",
@@ -1343,7 +1343,7 @@
                     const url = URL.createObjectURL(dataBlob);
                     const link = document.createElement('a');
                     link.href = url;
-                    link.download = 'xdpguard-stats-' + new Date().toISOString() + '.json';
+                    link.download = 'rubezh-stats-' + new Date().toISOString() + '.json';
                     link.click();
                 })
                 .catch(err => console.error('Export error:', err));
